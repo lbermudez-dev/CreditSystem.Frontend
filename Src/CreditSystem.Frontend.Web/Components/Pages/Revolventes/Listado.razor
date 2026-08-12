@@ -1,0 +1,231 @@
+@page "/revolventes"
+@inject IRevolvingCreditService RevolvingCreditService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Líneas Revolventes | CACE</PageTitle>
+
+<PageHeader Title="Líneas de Crédito Revolvente" Icon="credit_card"
+            Breadcrumb="Créditos / Revolventes">
+    <Actions>
+        <button class="btn btn-primary d-flex align-items-center gap-2" @onclick="() => _showCreate = true">
+            <span class="material-symbols-outlined" style="font-size:18px;">add</span>
+            Nueva Línea
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="cace-card p-4 mb-4">
+    <label class="form-label small fw-semibold text-uppercase text-muted" for="customerId">
+        GUID del Socio (customerId)
+    </label>
+    <div class="d-flex gap-2">
+        <input id="customerId" class="form-control" style="max-width:420px;" placeholder="3fa85f64-5717-4562-b3fc-2c963f66afa6"
+               @bind="_customerId" @bind:event="oninput" @onkeyup="OnCustomerKeyUp" />
+        <button class="btn btn-secondary text-white" @onclick="SearchByCustomerAsync">
+            <span class="material-symbols-outlined" style="font-size:18px;">search</span>
+            Buscar Líneas
+        </button>
+    </div>
+    @if (_invalidCustomerId)
+    {
+        <p class="text-danger small mt-2 mb-0">El ID ingresado no es un GUID válido.</p>
+    }
+</div>
+
+@if (_hasSearched)
+{
+    <DataTable TItem="RevolvingCreditSummaryResponse"
+               IsLoading="_isLoading"
+               Error="_error"
+               Items="_lines"
+               EmptyIcon="credit_card_off"
+               EmptyTitle="Sin líneas revolventes"
+               EmptyDescription="Este socio no tiene líneas de crédito revolvente registradas."
+               OnRetry="SearchByCustomerAsync">
+        <HeaderTemplate>
+            <th>ID</th>
+            <th>Estado</th>
+            <th class="text-end">Límite</th>
+            <th class="text-end">Saldo</th>
+            <th class="text-end">Disponible</th>
+            <th></th>
+        </HeaderTemplate>
+        <RowTemplate Context="line">
+            <td class="cace-table-mono">@line.CreditLineId.ToString()[..8]</td>
+            <td><StatusBadge Status="@(line.Status ?? "")" /></td>
+            <td class="text-end cace-table-mono">@CurrencyFormatter.Format(line.CreditLimit, line.Currency)</td>
+            <td class="text-end cace-table-mono">@CurrencyFormatter.Format(line.CurrentBalance, line.Currency)</td>
+            <td class="text-end cace-table-mono fw-semibold">@CurrencyFormatter.Format(line.AvailableCredit, line.Currency)</td>
+            <td class="text-end">
+                <button class="btn btn-sm btn-outline-secondary" @onclick='() => NavigationManager.NavigateTo($"/revolventes/{line.CreditLineId}")'>
+                    <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+                </button>
+            </td>
+        </RowTemplate>
+    </DataTable>
+}
+
+@if (_showCreate)
+{
+    <div class="modal d-block" style="background-color: rgba(0,0,0,0.4);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold cace-text-primary">Nueva Línea Revolvente</h5>
+                    <button class="btn-close" @onclick="() => _showCreate = false"></button>
+                </div>
+                <EditForm Model="_createRequest" OnValidSubmit="CreateAsync">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted">GUID del Socio (externalCustomerId)</label>
+                            <InputText class="form-control" @bind-Value="_createCustomerIdText" placeholder="3fa85f64-5717-4562-b3fc-2c963f66afa6" />
+                            @if (_invalidCreateCustomerId)
+                            {
+                                <p class="text-danger small mt-1 mb-0">Debe ser un GUID válido.</p>
+                            }
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Límite de Crédito</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.CreditLimit" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Moneda</label>
+                                <InputText class="form-control" @bind-Value="_createRequest.Currency" placeholder="NIO" />
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Tasa (%, opcional)</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.InterestRate" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Día de Corte (opcional)</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.BillingCycleDay" />
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">% Pago Mínimo (opcional)</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.MinimumPaymentPercentage" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Pago Mínimo Fijo (opcional)</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.MinimumPaymentAmount" />
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted">Período de Gracia (días, opcional)</label>
+                            <InputNumber class="form-control" @bind-Value="_createRequest.GracePeriodDays" />
+                        </div>
+
+                        @if (_createMessage is not null)
+                        {
+                            <div class="alert @(_createSuccess ? "alert-success" : "alert-danger") small mt-3 mb-0">
+                                @_createMessage
+                                @if (_createErrors is { Count: > 0 })
+                                {
+                                    <ul class="mb-0 mt-2">
+                                        @foreach (var e in _createErrors)
+                                        {
+                                            <li>@e</li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => _showCreate = false" disabled="@_isCreating">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@_isCreating">
+                            @if (_isCreating) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Crear Línea
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string _customerId = string.Empty;
+    private bool _invalidCustomerId;
+    private bool _hasSearched;
+    private bool _isLoading;
+    private ApiError? _error;
+    private List<RevolvingCreditSummaryResponse>? _lines;
+
+    private bool _showCreate;
+    private bool _isCreating;
+    private bool _createSuccess;
+    private string? _createMessage;
+    private List<string>? _createErrors;
+    private string _createCustomerIdText = string.Empty;
+    private bool _invalidCreateCustomerId;
+    private CreateCreditLineRequest _createRequest = new()
+    {
+        Currency = "NIO"
+    };
+
+    private Task OnCustomerKeyUp(KeyboardEventArgs e) =>
+        e.Key == "Enter" ? SearchByCustomerAsync() : Task.CompletedTask;
+
+    private async Task SearchByCustomerAsync()
+    {
+        if (!Guid.TryParse(_customerId.Trim(), out var customerId))
+        {
+            _invalidCustomerId = true;
+            return;
+        }
+
+        _invalidCustomerId = false;
+        _isLoading = true;
+        _hasSearched = true;
+        _error = null;
+        StateHasChanged();
+
+        var result = await RevolvingCreditService.GetByCustomerAsync(customerId);
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _lines = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        if (!Guid.TryParse(_createCustomerIdText.Trim(), out var customerId))
+        {
+            _invalidCreateCustomerId = true;
+            return;
+        }
+
+        _invalidCreateCustomerId = false;
+        _isCreating = true;
+        _createMessage = null;
+        _createErrors = null;
+
+        _createRequest.ExternalCustomerId = customerId;
+
+        var result = await RevolvingCreditService.CreateAsync(_createRequest);
+
+        _isCreating = false;
+
+        if (result.IsSuccess && result.Data is { Success: true, CreditLineId: not null })
+        {
+            NavigationManager.NavigateTo($"/revolventes/{result.Data.CreditLineId}");
+            return;
+        }
+
+        _createSuccess = false;
+        _createMessage = result.Data?.Message ?? result.Error?.Message ?? "No fue posible crear la línea.";
+        _createErrors = result.Data?.Errors;
+    }
+}

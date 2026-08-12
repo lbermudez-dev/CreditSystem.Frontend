@@ -1,0 +1,40 @@
+@* Traduce el campo "status" (string libre, sin enum) de LoanSummaryResponse
+   y RevolvingCreditSummaryResponse a una etiqueta visual en español.
+   DOCUMENTACION INSUFICIENTE: el swagger tipa "status" como string sin
+   enum ni catálogo de valores posibles. Los literales de abajo (Approved,
+   Active, Delinquent, Default, Restructured, PaidOff, Pending, Frozen,
+   Closed) son una inferencia razonable de la documentación funcional
+   previa — confirmar contra el backend real y ajustar el switch si los
+   valores exactos (mayúsculas/minúsculas, nombres) difieren. Cualquier
+   valor no reconocido se muestra tal cual llega (fallback "_ => Status"). *@
+
+<span class="cace-badge @CssClass">@Label</span>
+
+@code {
+    [Parameter] public string Status { get; set; } = string.Empty;
+
+    private string Label => Status switch
+    {
+        "Approved" => "Aprobado",
+        "Active" => "Activo",
+        "Delinquent" => "Moroso",
+        "Default" => "Incumplimiento",
+        "Restructured" => "Reestructurado",
+        "PaidOff" => "Liquidado",
+        "Pending" => "Pendiente",
+        "Frozen" => "Congelada",
+        "Closed" => "Cerrada",
+        _ => Status
+    };
+
+    private string CssClass => Status switch
+    {
+        "Active" => "cace-badge-success",
+        "Approved" or "Pending" => "cace-badge-info",
+        "Delinquent" or "Frozen" => "cace-badge-warning",
+        "Default" => "cace-badge-danger",
+        "PaidOff" or "Closed" => "cace-badge-neutral",
+        "Restructured" => "cace-badge-info",
+        _ => "cace-badge-neutral"
+    };
+}

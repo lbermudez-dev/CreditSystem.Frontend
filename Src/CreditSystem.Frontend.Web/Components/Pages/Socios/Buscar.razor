@@ -1,0 +1,55 @@
+@page "/socios"
+@inject NavigationManager NavigationManager
+
+<PageTitle>Socios | CACE</PageTitle>
+
+<PageHeader Title="Consulta de Socios" Icon="groups"
+            Subtitle="El swagger no expone un listado general de socios; ingrese el GUID (externalId) para ver su expediente.">
+    <Actions>
+        <a class="btn btn-primary d-flex align-items-center gap-2" href="/socios/nuevo">
+            <span class="material-symbols-outlined" style="font-size:18px;">person_add</span>
+            Afiliar Socio
+        </a>
+    </Actions>
+</PageHeader>
+
+<div class="cace-card p-4" style="max-width:480px;">
+    <label class="form-label small fw-semibold text-uppercase text-muted" for="socioId">GUID del Socio (externalId)</label>
+    <div class="d-flex gap-2">
+        <input id="socioId" class="form-control" placeholder="3fa85f64-5717-4562-b3fc-2c963f66afa6"
+               @bind="_customerId" @bind:event="oninput" @onkeyup="OnKeyUp" />
+        <button class="btn btn-secondary text-white" @onclick="GoToExpediente">
+            <span class="material-symbols-outlined" style="font-size:18px;">search</span>
+        </button>
+    </div>
+    @if (_invalidId)
+    {
+        <p class="text-danger small mt-2 mb-0">El ID ingresado no es un GUID válido.</p>
+    }
+</div>
+
+@code {
+    private string _customerId = string.Empty;
+    private bool _invalidId;
+
+    private void OnKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            GoToExpediente();
+        }
+    }
+
+    private void GoToExpediente()
+    {
+        if (Guid.TryParse(_customerId.Trim(), out var id))
+        {
+            _invalidId = false;
+            NavigationManager.NavigateTo($"/socios/{id}");
+        }
+        else
+        {
+            _invalidId = true;
+        }
+    }
+}

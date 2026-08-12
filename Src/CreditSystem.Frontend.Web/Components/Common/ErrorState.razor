@@ -1,0 +1,20 @@
+@* Se apoya en ApiError (Models/Common/ApiResult.cs) para mostrar un
+   mensaje comprensible sin exponer detalles internos del servidor. *@
+
+<div class="cace-state-panel">
+    <span class="material-symbols-outlined text-danger">error</span>
+    <p class="mt-2 mb-1 fw-semibold text-danger">No fue posible completar la solicitud</p>
+    <p class="mb-3 small">@(Error?.Message ?? "Ocurrió un error inesperado.")</p>
+    @if (OnRetry.HasDelegate)
+    {
+        <button class="btn btn-outline-secondary btn-sm" @onclick="OnRetry">
+            <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+            Reintentar
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter] public ApiError? Error { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+}

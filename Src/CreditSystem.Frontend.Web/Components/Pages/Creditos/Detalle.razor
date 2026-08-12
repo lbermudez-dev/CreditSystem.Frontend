@@ -1,0 +1,677 @@
+@page "/creditos/{LoanId:guid}"
+@inject ILoanService LoanService
+@inject IGuaranteeService GuaranteeService
+@inject IDocumentService DocumentService
+
+<PageTitle>Préstamo @LoanId | CACE</PageTitle>
+
+@if (_isLoading)
+{
+    <LoadingIndicator Message="Cargando préstamo..." />
+}
+else if (_loadError is not null)
+{
+    <ErrorState Error="_loadError" OnRetry="LoadAsync" />
+}
+else if (_summary is not null)
+{
+    <PageHeader Title="@($"Préstamo #{LoanId.ToString()[..8]}")" Icon="account_balance_wallet"
+                Breadcrumb="Créditos / Detalle"
+                Subtitle="@(_summary.CustomerName ?? _summary.CustomerId.ToString())">
+        <Actions>
+            <StatusBadge Status="@(_summary.Status ?? "")" />
+        </Actions>
+    </PageHeader>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <KpiCard Label="Saldo Actual" Value="@CurrencyFormatter.Format(_summary.CurrentBalance)" Accent="secondary" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Principal" Value="@CurrencyFormatter.Format(_summary.Principal)" Accent="secondary" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Tasa" Value="@($"{_summary.InterestRate:0.00}%")" Accent="secondary" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Pagos Vencidos" Value="@_summary.PaymentsMissed.ToString()"
+                     Accent="@(_summary.PaymentsMissed > 0 ? "warning" : "success")" />
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-4">
+        <button class="btn btn-sm btn-outline-secondary" @onclick="() => DownloadAsync(() => DocumentService.GetBalanceLetterAsync(LoanId))">
+            <span class="material-symbols-outlined" style="font-size:16px;">description</span> Carta de Saldo
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" @onclick='() => DownloadAsync(() => DocumentService.GetAmortizationTableAsync(LoanId, "pdf"))'>
+            <span class="material-symbols-outlined" style="font-size:16px;">table_chart</span> Tabla de Amortización
+        </button>
+    </div>
+    @if (_downloadError is not null)
+    {
+        <div class="alert alert-danger small">@_downloadError.Message</div>
+    }
+    @if (_downloadReady is not null)
+    {
+        <div class="alert alert-info small d-flex justify-content-between align-items-center">
+            <span>Documento listo: @_downloadReady.FileName (@_downloadReady.ContentType)</span>
+            <span class="text-muted">La descarga automática al navegador requiere interop JS adicional (no incluido en esta iteración).</span>
+        </div>
+    }
+
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <div class="cace-card p-4 mb-3">
+                <h3 class="h6 fw-bold cace-text-primary mb-3">Historial de Pagos</h3>
+                <DataTable TItem="PaymentHistoryResponse"
+                           IsLoading="_isLoadingPayments"
+                           Error="_paymentsError"
+                           Items="_payments"
+                           EmptyIcon="receipt_long"
+                           EmptyTitle="Sin pagos registrados"
+                           OnRetry="LoadPaymentsAsync">
+                    <HeaderTemplate>
+                        <th>#</th>
+                        <th>Fecha</th>
+                        <th class="text-end">Monto</th>
+                        <th class="text-end">Capital</th>
+                        <th class="text-end">Interés</th>
+                        <th class="text-end">Saldo Después</th>
+                        <th>Estado</th>
+                        <th></th>
+                    </HeaderTemplate>
+                    <RowTemplate Context="p">
+                        <td>@p.PaymentNumber</td>
+                        <td>@p.PaymentDate.ToString("dd/MM/yyyy")</td>
+                        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(p.TotalAmount)</td>
+                        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(p.PrincipalPaid)</td>
+                        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(p.InterestPaid)</td>
+                        <td class="text-end cace-table-mono fw-semibold">@CurrencyFormatter.Format(p.BalanceAfter)</td>
+                        <td>@(p.Status ?? "—")</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-secondary" title="Comprobante de pago (PDF)"
+                                    @onclick="() => DownloadAsync(() => DocumentService.GetPaymentReceiptAsync(LoanId, p.PaymentId))">
+                                <span class="material-symbols-outlined" style="font-size:16px;">receipt</span>
+                            </button>
+                        </td>
+                    </RowTemplate>
+                </DataTable>
+            </div>
+
+            <div class="cace-card p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3 class="h6 fw-bold cace-text-primary mb-0">Garantías</h3>
+                    <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" @onclick="() => _showAddGuarantee = true">
+                        <span class="material-symbols-outlined" style="font-size:16px;">add</span>
+                        Nueva Garantía
+                    </button>
+                </div>
+                <DataTable TItem="GuaranteeResponse"
+                           IsLoading="_isLoadingGuarantees"
+                           Error="_guaranteesError"
+                           Items="_guarantees"
+                           EmptyIcon="shield"
+                           EmptyTitle="Sin garantías registradas"
+                           OnRetry="LoadGuaranteesAsync">
+                    <HeaderTemplate>
+                        <th>Tipo</th>
+                        <th>Descripción</th>
+                        <th class="text-end">Valor de Avalúo</th>
+                        <th class="text-end">Cobertura Efectiva</th>
+                        <th>Estado</th>
+                        <th></th>
+                    </HeaderTemplate>
+                    <RowTemplate Context="g">
+                        <td>@(g.Type ?? "—")</td>
+                        <td>@(g.Description ?? "—")</td>
+                        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(g.AppraisalValue)</td>
+                        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(g.EffectiveCoverage)</td>
+                        <td><StatusBadge Status="@(g.Status ?? "")" /></td>
+                        <td class="text-end">
+                            @if (!string.Equals(g.Status, "Released", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" title="Cambiar estado" @onclick="() => StartGuaranteeStatusChange(g)" disabled="@_isActionBusy">
+                                    <span class="material-symbols-outlined" style="font-size:16px;">edit</span>
+                                </button>
+                            }
+                        </td>
+                    </RowTemplate>
+                </DataTable>
+
+                @if (_guaranteeActionError is not null)
+                {
+                    <div class="alert alert-danger small mt-3 mb-0">@_guaranteeActionError.Message</div>
+                }
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="cace-card p-4 mb-3">
+                <h3 class="h6 fw-bold cace-text-primary mb-3">Acciones</h3>
+
+                <button class="btn btn-primary w-100 mb-2 d-flex align-items-center justify-content-center gap-2"
+                        @onclick="DisburseAsync" disabled="@_isActionBusy">
+                    <span class="material-symbols-outlined" style="font-size:18px;">payments</span>
+                    Desembolsar
+                </button>
+
+                <div class="border rounded p-3 mb-3">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Registrar Pago</label>
+                    <input type="number" class="form-control mb-2" min="0.01" step="0.01" @bind="_paymentAmount" placeholder="Monto" />
+                    <input type="text" class="form-control mb-2" @bind="_paymentMethod" placeholder="Método (opcional)" />
+                    <button class="btn btn-secondary text-white w-100 d-flex align-items-center justify-content-center gap-2"
+                            @onclick="ApplyPaymentAsync" disabled="@(_isActionBusy || _paymentAmount <= 0)">
+                        @if (_isActionBusy)
+                        {
+                            <span class="spinner-border spinner-border-sm"></span>
+                        }
+                        <span class="material-symbols-outlined" style="font-size:18px;">receipt_long</span>
+                        Aplicar Pago
+                    </button>
+                </div>
+
+                <button class="btn btn-outline-secondary w-100 mb-2" @onclick="LoadPayoffAsync" disabled="@_isActionBusy">
+                    Ver Monto de Liquidación
+                </button>
+
+                @if (_payoff is not null)
+                {
+                    <div class="alert alert-info small">
+                        <strong>Total a liquidar:</strong> @CurrencyFormatter.Format(_payoff.TotalPayoffAmount, _payoff.Currency)
+                        <div class="mt-1">Válido hasta: @_payoff.ValidUntil.ToString("dd/MM/yyyy")</div>
+                        <button class="btn btn-sm btn-primary mt-2 w-100" @onclick="() => _confirmingPayoff = true">
+                            Liquidar Ahora
+                        </button>
+                    </div>
+                }
+
+                @if (_showDefaultReason)
+                {
+                    <div class="border border-danger rounded p-3 mb-2">
+                        <label class="form-label small fw-semibold text-uppercase text-muted">Motivo del Default</label>
+                        <input type="text" class="form-control mb-2" @bind="_defaultReason" />
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-secondary flex-fill" @onclick="() => _showDefaultReason = false" disabled="@_isActionBusy">Cancelar</button>
+                            <button class="btn btn-sm btn-danger flex-fill" @onclick="() => _confirmingDefault = true" disabled="@(_isActionBusy || string.IsNullOrWhiteSpace(_defaultReason))">Continuar</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <button class="btn btn-outline-danger w-100 mb-2" @onclick="() => _showDefaultReason = true" disabled="@_isActionBusy">
+                        Marcar como Default
+                    </button>
+                }
+
+                <button class="btn btn-outline-primary w-100" @onclick="() => _showRestructure = true" disabled="@_isActionBusy">
+                    Reestructurar
+                </button>
+
+                @if (_actionError is not null)
+                {
+                    <div class="alert alert-danger small mt-3 mb-0">@_actionError.Message</div>
+                }
+                @if (_actionMessage is not null)
+                {
+                    <div class="alert alert-success small mt-3 mb-0">@_actionMessage</div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmDialog IsVisible="_confirmingDefault"
+               Title="Marcar préstamo como Default"
+               Message="Esta acción activa el proceso de cobro. Indique el motivo abajo antes de confirmar."
+               IsBusy="_isActionBusy"
+               OnConfirm="MarkDefaultAsync"
+               OnCancel="() => _confirmingDefault = false" />
+
+<ConfirmDialog IsVisible="_confirmingPayoff"
+               Title="Confirmar liquidación"
+               Message="@($"Se aplicará un pago total de {(_payoff is not null ? CurrencyFormatter.Format(_payoff.TotalPayoffAmount, _payoff.Currency) : string.Empty)} y el préstamo quedará liquidado.")"
+               IsBusy="_isActionBusy"
+               IsDestructive="false"
+               OnConfirm="PayoffAsync"
+               OnCancel="() => _confirmingPayoff = false" />
+
+@if (_showRestructure)
+{
+    <div class="modal d-block" style="background-color: rgba(0,0,0,0.4);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold cace-text-primary">Reestructurar Préstamo</h5>
+                    <button class="btn-close" @onclick="() => _showRestructure = false"></button>
+                </div>
+                <EditForm Model="_restructureRequest" OnValidSubmit="RestructureAsync">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted">Nueva Tasa (%)</label>
+                            <InputNumber class="form-control" @bind-Value="_restructureRequest.NewInterestRate" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted">Nuevo Plazo (meses)</label>
+                            <InputNumber class="form-control" @bind-Value="_restructureRequest.NewTermMonths" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted">Monto de Quita (opcional)</label>
+                            <InputNumber class="form-control" @bind-Value="_restructureRequest.ForgiveAmount" />
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label small fw-semibold text-uppercase text-muted">Motivo</label>
+                            <InputTextArea class="form-control" @bind-Value="_restructureRequest.Reason" rows="2" />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => _showRestructure = false" disabled="@_isActionBusy">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@_isActionBusy">
+                            @if (_isActionBusy) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Confirmar Reestructuración
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showAddGuarantee)
+{
+    <div class="modal d-block" style="background-color: rgba(0,0,0,0.4);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold cace-text-primary">Registrar Garantía</h5>
+                    <button class="btn-close" @onclick="() => _showAddGuarantee = false"></button>
+                </div>
+                <EditForm Model="_guaranteeRequest" OnValidSubmit="RegisterGuaranteeAsync">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted">Tipo</label>
+                            <InputSelect class="form-select" @bind-Value="_guaranteeRequest.Type">
+                                <option value="@GuaranteeType.RealEstate">Bien Inmueble</option>
+                                <option value="@GuaranteeType.Vehicle">Vehículo</option>
+                                <option value="@GuaranteeType.CashDeposit">Depósito en Efectivo</option>
+                                <option value="@GuaranteeType.Inventory">Inventario</option>
+                                <option value="@GuaranteeType.Other">Otro</option>
+                            </InputSelect>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted">Descripción</label>
+                            <InputText class="form-control" @bind-Value="_guaranteeRequest.Description" />
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Valor de Avalúo</label>
+                                <InputNumber class="form-control" @bind-Value="_guaranteeRequest.AppraisalValue" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Tasa de Cobertura</label>
+                                <InputNumber class="form-control" @bind-Value="_guaranteeRequest.CoverageRate" />
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted">Fecha de Vencimiento (opcional)</label>
+                            <InputDate class="form-control" @bind-Value="_guaranteeExpirationDate" />
+                        </div>
+
+                        @if (_guaranteeActionError is not null)
+                        {
+                            <div class="alert alert-danger small mt-3 mb-0">@_guaranteeActionError.Message</div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => _showAddGuarantee = false" disabled="@_isActionBusy">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@_isActionBusy">
+                            @if (_isActionBusy) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Registrar
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_guaranteeToChangeStatus is not null)
+{
+    <div class="modal d-block" style="background-color: rgba(0,0,0,0.4);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold cace-text-primary">Cambiar Estado de Garantía</h5>
+                    <button class="btn-close" @onclick="() => _guaranteeToChangeStatus = null"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Nuevo Estado</label>
+                    <InputSelect class="form-select" @bind-Value="_newGuaranteeStatus">
+                        <option value="@GuaranteeStatus.Pending">Pendiente</option>
+                        <option value="@GuaranteeStatus.Active">Activa</option>
+                        <option value="@GuaranteeStatus.Released">Liberada</option>
+                    </InputSelect>
+                    @if (_guaranteeActionError is not null)
+                    {
+                        <div class="alert alert-danger small mt-3 mb-0">@_guaranteeActionError.Message</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => _guaranteeToChangeStatus = null" disabled="@_isActionBusy">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="UpdateGuaranteeStatusAsync" disabled="@_isActionBusy">
+                        @if (_isActionBusy) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid LoanId { get; set; }
+
+    private bool _isLoading = true;
+    private ApiError? _loadError;
+    private LoanSummaryResponse? _summary;
+
+    private bool _isLoadingPayments;
+    private ApiError? _paymentsError;
+    private List<PaymentHistoryResponse>? _payments;
+
+    private bool _isLoadingGuarantees;
+    private ApiError? _guaranteesError;
+    private List<GuaranteeResponse>? _guarantees;
+
+    private bool _showAddGuarantee;
+    private CreateGuaranteeRequest _guaranteeRequest = new();
+    private DateTime? _guaranteeExpirationDate;
+    private GuaranteeResponse? _guaranteeToChangeStatus;
+    private GuaranteeStatus _newGuaranteeStatus;
+    private ApiError? _guaranteeActionError;
+
+    private bool _isActionBusy;
+    private ApiError? _actionError;
+    private string? _actionMessage;
+
+    private decimal _paymentAmount;
+    private string _paymentMethod = string.Empty;
+    private PayoffAmountResponse? _payoff;
+
+    private bool _showDefaultReason;
+    private bool _confirmingDefault;
+    private string _defaultReason = string.Empty;
+    private bool _confirmingPayoff;
+    private bool _showRestructure;
+    private RestructureContractRequest _restructureRequest = new();
+
+    private ApiError? _downloadError;
+    private DocumentFile? _downloadReady;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        await LoadPaymentsAsync();
+        await LoadGuaranteesAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _loadError = null;
+        var result = await LoanService.GetSummaryAsync(LoanId);
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _summary = result.Data;
+        }
+        else
+        {
+            _loadError = result.Error;
+        }
+    }
+
+    private async Task LoadPaymentsAsync()
+    {
+        _isLoadingPayments = true;
+        _paymentsError = null;
+        StateHasChanged();
+
+        var result = await LoanService.GetPaymentHistoryAsync(LoanId);
+        _isLoadingPayments = false;
+
+        if (result.IsSuccess)
+        {
+            _payments = result.Data;
+        }
+        else
+        {
+            _paymentsError = result.Error;
+        }
+    }
+
+    private async Task LoadGuaranteesAsync()
+    {
+        _isLoadingGuarantees = true;
+        _guaranteesError = null;
+        StateHasChanged();
+
+        var result = await GuaranteeService.GetByContractAsync(LoanId);
+        _isLoadingGuarantees = false;
+
+        if (result.IsSuccess)
+        {
+            _guarantees = result.Data;
+        }
+        else
+        {
+            _guaranteesError = result.Error;
+        }
+    }
+
+    private async Task RegisterGuaranteeAsync()
+    {
+        _isActionBusy = true;
+        _guaranteeActionError = null;
+
+        _guaranteeRequest.ExpirationDate = _guaranteeExpirationDate is null
+            ? null
+            : DateOnly.FromDateTime(_guaranteeExpirationDate.Value);
+
+        var result = await GuaranteeService.RegisterAsync(LoanId, _guaranteeRequest);
+
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _showAddGuarantee = false;
+            _guaranteeRequest = new CreateGuaranteeRequest();
+            _guaranteeExpirationDate = null;
+            await LoadGuaranteesAsync();
+        }
+        else
+        {
+            _guaranteeActionError = result.Error;
+        }
+    }
+
+    private void StartGuaranteeStatusChange(GuaranteeResponse guarantee)
+    {
+        _guaranteeActionError = null;
+        _guaranteeToChangeStatus = guarantee;
+        _newGuaranteeStatus = Enum.TryParse<GuaranteeStatus>(guarantee.Status, out var parsed)
+            ? parsed
+            : GuaranteeStatus.Pending;
+    }
+
+    private async Task UpdateGuaranteeStatusAsync()
+    {
+        if (_guaranteeToChangeStatus is null)
+        {
+            return;
+        }
+
+        _isActionBusy = true;
+        _guaranteeActionError = null;
+
+        var result = await GuaranteeService.UpdateStatusAsync(
+            LoanId,
+            _guaranteeToChangeStatus.Id,
+            new UpdateGuaranteeStatusRequest { Status = _newGuaranteeStatus });
+
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _guaranteeToChangeStatus = null;
+            await LoadGuaranteesAsync();
+        }
+        else
+        {
+            _guaranteeActionError = result.Error;
+        }
+    }
+
+    private async Task DownloadAsync(Func<Task<ApiResult<DocumentFile>>> fetch)
+    {
+        _downloadError = null;
+        _downloadReady = null;
+        var result = await fetch();
+
+        if (result.IsSuccess)
+        {
+            _downloadReady = result.Data;
+        }
+        else
+        {
+            _downloadError = result.Error;
+        }
+    }
+
+    private async Task DisburseAsync()
+    {
+        _isActionBusy = true;
+        _actionError = null;
+        _actionMessage = null;
+
+        var result = await LoanService.DisburseAsync(LoanId, new DisburseLoanRequest());
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _actionMessage = result.Data?.Message;
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task ApplyPaymentAsync()
+    {
+        if (_paymentAmount <= 0)
+        {
+            return;
+        }
+
+        _isActionBusy = true;
+        _actionError = null;
+        _actionMessage = null;
+
+        var result = await LoanService.ApplyPaymentAsync(LoanId, new ApplyPaymentRequest
+        {
+            Amount = _paymentAmount,
+            PaymentMethod = string.IsNullOrWhiteSpace(_paymentMethod) ? null : _paymentMethod
+        });
+
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _actionMessage = result.Data?.Message ?? "Pago aplicado correctamente.";
+            _paymentAmount = 0;
+            _paymentMethod = string.Empty;
+            await LoadAsync();
+            await LoadPaymentsAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task LoadPayoffAsync()
+    {
+        _isActionBusy = true;
+        _actionError = null;
+        var result = await LoanService.GetPayoffAmountAsync(LoanId);
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _payoff = result.Data;
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task PayoffAsync()
+    {
+        _isActionBusy = true;
+        var result = await LoanService.PayoffAsync(LoanId, new PayoffContractRequest());
+        _isActionBusy = false;
+        _confirmingPayoff = false;
+
+        if (result.IsSuccess)
+        {
+            _actionMessage = result.Data?.Message;
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task MarkDefaultAsync()
+    {
+        _isActionBusy = true;
+        var result = await LoanService.MarkAsDefaultAsync(LoanId, new DefaultContractRequest { Reason = _defaultReason });
+        _isActionBusy = false;
+        _confirmingDefault = false;
+
+        if (result.IsSuccess)
+        {
+            _actionMessage = result.Data?.Message;
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task RestructureAsync()
+    {
+        _isActionBusy = true;
+        var result = await LoanService.RestructureAsync(LoanId, _restructureRequest);
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _showRestructure = false;
+            _actionMessage = result.Data?.Message;
+            _restructureRequest = new RestructureContractRequest();
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+}

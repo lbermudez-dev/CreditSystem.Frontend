@@ -1,0 +1,229 @@
+@page "/riesgo"
+@inject IRiskService RiskService
+
+<PageTitle>Clasificación de Riesgo | CACE</PageTitle>
+
+<PageHeader Title="Clasificación de Riesgo de Cartera" Icon="analytics"
+            Subtitle="GET /api/v1/loans/risk-summary" />
+
+@if (_isLoading)
+{
+    <LoadingIndicator Message="Cargando resumen de riesgo..." />
+}
+else if (_error is not null)
+{
+    <ErrorState Error="_error" OnRetry="LoadAsync" />
+}
+else if (_summary is not null)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <KpiCard Label="Total de Préstamos" Value="@_summary.TotalLoans.ToString()" Accent="secondary" />
+        </div>
+        <div class="col-md-4">
+            <KpiCard Label="Saldo Total de Cartera" Value="@CurrencyFormatter.Format(_summary.TotalPortfolioBalance)" Accent="secondary" />
+        </div>
+        <div class="col-md-4">
+            <KpiCard Label="Provisión Requerida" Value="@CurrencyFormatter.Format(_summary.TotalRequiredProvision)" Accent="warning" />
+        </div>
+    </div>
+
+    <DataTable TItem="RiskCategoryRow"
+               IsLoading="false"
+               Items="_summary.Categories"
+               EmptyIcon="analytics"
+               EmptyTitle="Sin categorías de riesgo">
+        <HeaderTemplate>
+            <th>Categoría</th>
+            <th class="text-end">% Provisión</th>
+            <th class="text-end"># Préstamos</th>
+            <th class="text-end">Saldo Total</th>
+            <th class="text-end">Provisión Total</th>
+            <th></th>
+        </HeaderTemplate>
+        <RowTemplate Context="row">
+            <td><span class="cace-badge cace-badge-info">@row.Category</span></td>
+            <td class="text-end cace-table-mono">@row.ProvisionPercentage.ToString("0.00")%</td>
+            <td class="text-end">@row.LoanCount</td>
+            <td class="text-end cace-table-mono">@CurrencyFormatter.Format(row.TotalBalance)</td>
+            <td class="text-end cace-table-mono fw-semibold">@CurrencyFormatter.Format(row.TotalProvision)</td>
+            <td class="text-end">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => SelectCategory(row.Category)">
+                    <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+                </button>
+            </td>
+        </RowTemplate>
+    </DataTable>
+}
+
+@if (_selectedCategory is not null)
+{
+    <div class="cace-card p-4 mt-4">
+        <h3 class="h6 fw-bold cace-text-primary mb-3">Préstamos en categoría "@_selectedCategory"</h3>
+        <DataTable TItem="LoanRiskDetailRow"
+                   IsLoading="_isLoadingDetail"
+                   Error="_detailError"
+                   Items="_detail"
+                   EmptyIcon="check_circle"
+                   EmptyTitle="Sin préstamos en esta categoría"
+                   OnRetry="() => SelectCategory(_selectedCategory)">
+            <HeaderTemplate>
+                <th>Préstamo</th>
+                <th>Socio</th>
+                <th class="text-end">Saldo</th>
+                <th class="text-end">Provisión Estimada</th>
+                <th class="text-center">Días Atraso</th>
+                <th></th>
+            </HeaderTemplate>
+            <RowTemplate Context="d">
+                <td class="cace-table-mono">@d.LoanId.ToString()[..8]</td>
+                <td>@(d.CustomerName ?? d.CustomerId.ToString()[..8])</td>
+                <td class="text-end cace-table-mono">@CurrencyFormatter.Format(d.CurrentBalance)</td>
+                <td class="text-end cace-table-mono">@CurrencyFormatter.Format(d.EstimatedProvision)</td>
+                <td class="text-center">@d.DaysOverdue</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-secondary" title="Reclasificar manualmente" @onclick="() => StartReclassify(d)">
+                        <span class="material-symbols-outlined" style="font-size:16px;">move_down</span>
+                    </button>
+                </td>
+            </RowTemplate>
+        </DataTable>
+    </div>
+}
+
+@if (_reclassifyTarget is not null)
+{
+    <div class="modal d-block" style="background-color: rgba(0,0,0,0.4);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold cace-text-primary">Reclasificar Préstamo</h5>
+                    <button class="btn-close" @onclick="() => _reclassifyTarget = null"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">
+                        PUT /api/v1/loans/{loanId}/risk-category — solo permite <strong>degradar</strong> a una
+                        categoría de mayor riesgo (la mejora es automática por reducción de días de atraso).
+                    </p>
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Nueva Categoría (SUGEF 1-05)</label>
+                    <select class="form-select" @bind="_newCategory">
+                        <option value="A1">A1 — Riesgo normal</option>
+                        <option value="A2">A2 — Riesgo normal con alerta</option>
+                        <option value="B1">B1 — Riesgo especial</option>
+                        <option value="B2">B2 — Riesgo especial alto</option>
+                        <option value="C1">C1 — Dudoso cobro</option>
+                        <option value="C2">C2 — Dudoso cobro alto</option>
+                        <option value="D">D — Pérdida probable</option>
+                        <option value="E">E — Pérdida</option>
+                    </select>
+                    @if (_reclassifyError is not null)
+                    {
+                        <div class="alert alert-danger small mt-3 mb-0">@_reclassifyError.Message</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => _reclassifyTarget = null" disabled="@_isReclassifying">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="ReclassifyAsync" disabled="@_isReclassifying">
+                        @if (_isReclassifying) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Confirmar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _isLoading = true;
+    private ApiError? _error;
+    private RiskSummaryResponse? _summary;
+
+    private string? _selectedCategory;
+    private bool _isLoadingDetail;
+    private ApiError? _detailError;
+    private List<LoanRiskDetailRow>? _detail;
+
+    private LoanRiskDetailRow? _reclassifyTarget;
+    private string _newCategory = "B1";
+    private bool _isReclassifying;
+    private ApiError? _reclassifyError;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        var result = await RiskService.GetSummaryAsync();
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _summary = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+
+    private async Task SelectCategory(string? category)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            return;
+        }
+
+        _selectedCategory = category;
+        _isLoadingDetail = true;
+        _detailError = null;
+        StateHasChanged();
+
+        var result = await RiskService.GetCategoryDetailAsync(category);
+        _isLoadingDetail = false;
+
+        if (result.IsSuccess)
+        {
+            _detail = result.Data;
+        }
+        else
+        {
+            _detailError = result.Error;
+        }
+    }
+
+    private void StartReclassify(LoanRiskDetailRow row)
+    {
+        _reclassifyError = null;
+        _reclassifyTarget = row;
+        _newCategory = row.RiskCategory ?? "B1";
+    }
+
+    private async Task ReclassifyAsync()
+    {
+        if (_reclassifyTarget is null)
+        {
+            return;
+        }
+
+        _isReclassifying = true;
+        _reclassifyError = null;
+
+        var result = await RiskService.ManualReclassifyAsync(
+            _reclassifyTarget.LoanId,
+            new ManualReclassifyRequest { Category = _newCategory });
+
+        _isReclassifying = false;
+
+        if (result.IsSuccess)
+        {
+            _reclassifyTarget = null;
+            await SelectCategory(_selectedCategory);
+            await LoadAsync();
+        }
+        else
+        {
+            _reclassifyError = result.Error;
+        }
+    }
+}

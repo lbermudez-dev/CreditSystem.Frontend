@@ -1,0 +1,96 @@
+@page "/webhooks"
+@inject IWebhookService WebhookService
+
+<PageTitle>Webhooks | CACE</PageTitle>
+
+<PageHeader Title="Suscripciones a Webhooks" Icon="webhook"
+            Subtitle="POST /api/v1/webhooks/subscribe — notifica a sistemas externos (apps móviles, portal de socios, contabilidad) ante eventos de pago. Las notificaciones se firman con HMAC-SHA256 usando la clave secreta." />
+
+<div class="cace-card p-4" style="max-width:560px;">
+    <EditForm Model="_request" OnValidSubmit="SubmitAsync">
+        <DataAnnotationsValidator />
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">GUID del Socio/Cliente (customerId)</label>
+            <InputText class="form-control" @bind-Value="_customerIdText" placeholder="3fa85f64-5717-4562-b3fc-2c963f66afa6" />
+            @if (_invalidCustomerId)
+            {
+                <p class="text-danger small mt-1 mb-0">Debe ser un GUID válido.</p>
+            }
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">Tipo de Evento</label>
+            <InputSelect class="form-select" @bind-Value="_request.EventType">
+                <option value="PaymentApplied">Pago Aplicado</option>
+                <option value="PaymentMissed">Cuota Vencida</option>
+                <option value="LoanDisbursed">Desembolso Realizado</option>
+                <option value="LoanPaidOff">Préstamo Liquidado</option>
+                <option value="LoanDefaulted">Préstamo en Default</option>
+            </InputSelect>
+            <p class="text-muted small mt-1 mb-0">Catálogo inferido de la documentación funcional — confirmar contra el backend real.</p>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">URL de Callback</label>
+            <InputText class="form-control" @bind-Value="_request.CallbackUrl" placeholder="https://sistema-externo.example.com/webhooks/credit" />
+        </div>
+
+        <div class="mb-0">
+            <label class="form-label small fw-semibold text-uppercase text-muted">Clave Secreta (para firma HMAC-SHA256)</label>
+            <InputText class="form-control" @bind-Value="_request.SecretKey" />
+        </div>
+
+        @if (_message is not null)
+        {
+            <div class="alert @(_success ? "alert-success" : "alert-danger") small mt-3 mb-0">@_message</div>
+        }
+
+        <div class="d-flex justify-content-end mt-4 pt-3 border-top">
+            <button type="submit" class="btn btn-primary d-flex align-items-center gap-2" disabled="@_isSubmitting">
+                @if (_isSubmitting) { <span class="spinner-border spinner-border-sm"></span> }
+                Suscribir
+            </button>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    private SubscribeWebhookRequest _request = new() { EventType = "PaymentApplied" };
+    private string _customerIdText = string.Empty;
+    private bool _invalidCustomerId;
+
+    private bool _isSubmitting;
+    private bool _success;
+    private string? _message;
+
+    private async Task SubmitAsync()
+    {
+        if (!Guid.TryParse(_customerIdText.Trim(), out var customerId))
+        {
+            _invalidCustomerId = true;
+            return;
+        }
+
+        _invalidCustomerId = false;
+        _isSubmitting = true;
+        _message = null;
+
+        _request.CustomerId = customerId;
+
+        var result = await WebhookService.SubscribeAsync(_request);
+
+        _isSubmitting = false;
+
+        if (result.IsSuccess && result.Data is { IsSuccess: true })
+        {
+            _success = true;
+            _message = $"Suscripción creada. subscriptionId: {result.Data.SubscriptionId}";
+        }
+        else
+        {
+            _success = false;
+            _message = result.Data?.ErrorMessage ?? result.Error?.Message ?? "No fue posible crear la suscripción.";
+        }
+    }
+}

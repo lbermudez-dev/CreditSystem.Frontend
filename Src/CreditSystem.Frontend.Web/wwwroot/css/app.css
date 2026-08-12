@@ -1,0 +1,227 @@
+/* =========================================================================
+   Design tokens replicados de los HTML de referencia (Dash.html,
+   ExpedientePersona.html, Creditos.html). Los HTML originales usaban
+   Tailwind vía CDN con esta misma paleta; aquí se traduce a variables CSS
+   + clases utilitarias puntuales para trabajar sobre Bootstrap (que es lo
+   que el proyecto real usa), sin traer Tailwind como dependencia nueva.
+   ========================================================================= */
+
+:root {
+  --cace-primary: #001833;
+  --cace-primary-container: #002d56;
+  --cace-secondary: #005db6;
+  --cace-secondary-container: #63a1ff;
+  --cace-on-secondary-container: #00376f;
+  --cace-success: #2E7D32;
+  --cace-warning: #F59E0B;
+  --cace-danger: #D32F2F;
+  --cace-error: #ba1a1a;
+  --cace-error-container: #ffdad6;
+  --cace-on-error-container: #93000a;
+  --cace-surface: #FFFFFF;
+  --cace-background: #f7f9fb;
+  --cace-border: #E2E8F0;
+  --cace-outline-variant: #c3c6d0;
+  --cace-on-surface: #191c1e;
+  --cace-on-surface-variant: #43474e;
+  --cace-surface-container-low: #f2f4f6;
+  --cace-surface-container-high: #e6e8ea;
+
+  --cace-sidebar-width: 260px;
+  --cace-header-height: 64px;
+  --cace-radius: 0.5rem;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--cace-background);
+  color: var(--cace-on-surface);
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+/* ---- App shell -------------------------------------------------------- */
+
+.cace-header {
+  height: var(--cace-header-height);
+  background-color: var(--cace-surface);
+  border-bottom: 1px solid var(--cace-border);
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+}
+
+.cace-brand-badge {
+  width: 32px;
+  height: 32px;
+  background-color: var(--cace-primary);
+  color: #fff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.cace-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--cace-secondary-container);
+  color: var(--cace-on-secondary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.cace-sidebar {
+  width: var(--cace-sidebar-width);
+  position: fixed;
+  top: var(--cace-header-height);
+  left: 0;
+  bottom: 0;
+  background-color: var(--cace-surface-container-low);
+  border-right: 1px solid var(--cace-border);
+  overflow-y: auto;
+  padding: 1rem 0.5rem;
+  z-index: 1020;
+}
+
+.cace-sidebar .nav-link {
+  color: var(--cace-on-surface-variant);
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 2px;
+}
+
+.cace-sidebar .nav-link:hover {
+  background-color: var(--cace-surface-container-high);
+}
+
+.cace-sidebar .nav-link.active {
+  background-color: var(--cace-secondary-container);
+  color: var(--cace-on-secondary-container);
+}
+
+.cace-main {
+  margin-left: 0;
+  padding-top: 1rem;
+  min-height: calc(100vh - var(--cace-header-height));
+}
+
+@media (min-width: 992px) {
+  .cace-main {
+    margin-left: var(--cace-sidebar-width);
+  }
+}
+
+.cace-footer {
+  background-color: var(--cace-surface-container-low);
+  border-top: 1px solid var(--cace-border);
+  font-size: 0.8125rem;
+  color: var(--cace-on-surface-variant);
+}
+
+/* ---- Cards / KPIs ------------------------------------------------------ */
+
+.cace-card {
+  background-color: var(--cace-surface);
+  border: 1px solid var(--cace-border);
+  border-radius: var(--cace-radius);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.cace-kpi-card {
+  border-left-width: 4px;
+  border-left-style: solid;
+}
+
+.cace-kpi-card.cace-accent-secondary { border-left-color: var(--cace-secondary); }
+.cace-kpi-card.cace-accent-warning { border-left-color: var(--cace-warning); }
+.cace-kpi-card.cace-accent-success { border-left-color: var(--cace-success); }
+.cace-kpi-card.cace-accent-danger { border-left-color: var(--cace-danger); }
+
+.cace-kpi-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cace-on-surface-variant);
+}
+
+.cace-kpi-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--cace-primary);
+}
+
+/* ---- Badges de estado --------------------------------------------------- */
+
+.cace-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.cace-badge-neutral { background-color: var(--cace-surface-container-high); color: var(--cace-on-surface-variant); }
+.cace-badge-info { background-color: rgba(99, 161, 255, 0.18); color: var(--cace-on-secondary-container); }
+.cace-badge-success { background-color: rgba(46, 125, 50, 0.12); color: var(--cace-success); }
+.cace-badge-warning { background-color: rgba(245, 158, 11, 0.14); color: #92610a; }
+.cace-badge-danger { background-color: var(--cace-error-container); color: var(--cace-on-error-container); }
+
+/* ---- Tabla de datos genérica -------------------------------------------- */
+
+.cace-table thead th {
+  background-color: var(--cace-surface-container-low);
+  color: var(--cace-on-surface-variant);
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  border-bottom: 1px solid var(--cace-border);
+  white-space: nowrap;
+}
+
+.cace-table td {
+  vertical-align: middle;
+  font-size: 0.875rem;
+}
+
+.cace-table-mono {
+  font-family: 'Consolas', 'Menlo', monospace;
+}
+
+/* ---- Estados de página (loading / empty / error) ------------------------ */
+
+.cace-state-panel {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--cace-on-surface-variant);
+}
+
+.cace-state-panel .material-symbols-outlined {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+/* ---- Utilidades varias ---------------------------------------------------*/
+
+.cace-text-primary { color: var(--cace-primary) !important; }
+.cace-bg-primary { background-color: var(--cace-primary) !important; color: #fff; }
+.cace-bg-secondary { background-color: var(--cace-secondary) !important; }
+.cace-border-0 { border: none !important; }

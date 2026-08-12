@@ -1,0 +1,111 @@
+@page "/morosos"
+@inject IDelinquentLoanService DelinquentLoanService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Cartera Morosa | CACE</PageTitle>
+
+<PageHeader Title="Cartera Morosa" Icon="warning" Breadcrumb="Créditos / Morosos"
+            Subtitle="GET /api/v1/delinquent-loans, filtrable por días de atraso y estado de cobro." />
+
+<div class="cace-card p-3 mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">Días de atraso mínimos</label>
+            <input type="number" class="form-control" min="0" @bind="_minDaysOverdue" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label small fw-semibold text-uppercase text-muted">Estado de cobro</label>
+            <input type="text" class="form-control" placeholder="Valor libre (catálogo no documentado)" @bind="_collectionStatus" />
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-secondary text-white w-100" @onclick="LoadAsync">
+                <span class="material-symbols-outlined" style="font-size:18px;">filter_alt</span>
+                Filtrar
+            </button>
+        </div>
+    </div>
+</div>
+
+<DataTable TItem="DelinquentLoanResponse"
+           IsLoading="_isLoading"
+           Error="_error"
+           Items="_loans"
+           EmptyIcon="check_circle"
+           EmptyTitle="Sin préstamos morosos"
+           EmptyDescription="No hay resultados para los filtros aplicados."
+           OnRetry="LoadAsync">
+    <HeaderTemplate>
+        <th>Préstamo</th>
+        <th>Socio</th>
+        <th>Contacto</th>
+        <th class="text-end">Saldo</th>
+        <th class="text-center">Días Atraso</th>
+        <th>Estado de Cobro</th>
+        <th>Gestor</th>
+        <th>Último Pago</th>
+        <th></th>
+    </HeaderTemplate>
+    <RowTemplate Context="loan">
+        <td class="cace-table-mono">@loan.LoanId.ToString()[..8]</td>
+        <td>@(loan.CustomerName ?? loan.CustomerId.ToString()[..8])</td>
+        <td class="small text-muted">
+            @loan.CustomerPhone
+            @if (!string.IsNullOrWhiteSpace(loan.CustomerPhone) && !string.IsNullOrWhiteSpace(loan.CustomerEmail))
+            {
+                <br />
+            }
+            @loan.CustomerEmail
+        </td>
+        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(loan.CurrentBalance)</td>
+        <td class="text-center fw-semibold">@loan.DaysOverdue</td>
+        <td>
+            @if (!string.IsNullOrWhiteSpace(loan.CollectionStatus))
+            {
+                <span class="cace-badge cace-badge-warning">@loan.CollectionStatus</span>
+            }
+            else
+            {
+                <span class="text-muted small">—</span>
+            }
+        </td>
+        <td>@(loan.AssignedCollector ?? "—")</td>
+        <td>@(loan.LastPaymentAt?.ToString("dd/MM/yyyy") ?? "—")</td>
+        <td class="text-end">
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => VerDetalle(loan.LoanId)">
+                <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+            </button>
+        </td>
+    </RowTemplate>
+</DataTable>
+
+@code {
+    private bool _isLoading = true;
+    private ApiError? _error;
+    private List<DelinquentLoanResponse>? _loans;
+
+    private int? _minDaysOverdue;
+    private string? _collectionStatus;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        StateHasChanged();
+
+        var result = await DelinquentLoanService.GetAsync(_minDaysOverdue, _collectionStatus);
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _loans = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+
+    private void VerDetalle(Guid loanId) => NavigationManager.NavigateTo($"/creditos/{loanId}");
+}

@@ -1,0 +1,412 @@
+@page "/revolventes/{CreditLineId:guid}"
+@inject IRevolvingCreditService RevolvingCreditService
+
+<PageTitle>Línea Revolvente | CACE</PageTitle>
+
+@if (_isLoading)
+{
+    <LoadingIndicator Message="Cargando línea de crédito..." />
+}
+else if (_loadError is not null)
+{
+    <ErrorState Error="_loadError" OnRetry="LoadAsync" />
+}
+else if (_summary is not null)
+{
+    <PageHeader Title="@($"Línea Revolvente #{CreditLineId.ToString()[..8]}")" Icon="credit_card"
+                Breadcrumb="Créditos / Revolventes / Detalle"
+                Subtitle="@(_summary.CustomerName ?? _summary.CustomerId.ToString())">
+        <Actions>
+            <StatusBadge Status="@(_summary.Status ?? "")" />
+        </Actions>
+    </PageHeader>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <KpiCard Label="Límite de Crédito" Value="@CurrencyFormatter.Format(_summary.CreditLimit, _summary.Currency)" Accent="secondary" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Saldo Actual" Value="@CurrencyFormatter.Format(_summary.CurrentBalance, _summary.Currency)" Accent="secondary" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Disponible" Value="@CurrencyFormatter.Format(_summary.AvailableCredit, _summary.Currency)" Accent="success" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Pago Mínimo Actual" Value="@CurrencyFormatter.Format(_summary.CurrentMinimumPayment ?? 0, _summary.Currency)" Accent="warning" />
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <div class="cace-card p-4 mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3 class="h6 fw-bold cace-text-primary mb-0">Transacciones</h3>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="LoadTransactionsAsync">
+                        <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+                    </button>
+                </div>
+                <DataTable TItem="RevolvingTransactionResponse"
+                           IsLoading="_isLoadingTransactions"
+                           Error="_transactionsError"
+                           Items="_transactions"
+                           EmptyIcon="receipt_long"
+                           EmptyTitle="Sin transacciones"
+                           OnRetry="LoadTransactionsAsync">
+                    <HeaderTemplate>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        <th>Descripción</th>
+                        <th class="text-end">Monto</th>
+                        <th class="text-end">Saldo Después</th>
+                    </HeaderTemplate>
+                    <RowTemplate Context="t">
+                        <td>@t.TransactionDate.ToString("dd/MM/yyyy HH:mm")</td>
+                        <td>@(t.TransactionType ?? "—")</td>
+                        <td class="small text-muted">@(t.Description ?? "—")</td>
+                        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(t.Amount, _summary.Currency)</td>
+                        <td class="text-end cace-table-mono fw-semibold">@CurrencyFormatter.Format(t.BalanceAfter, _summary.Currency)</td>
+                    </RowTemplate>
+                </DataTable>
+            </div>
+
+            <div class="cace-card p-4">
+                <h3 class="h6 fw-bold cace-text-primary mb-3">Estados de Cuenta</h3>
+                <DataTable TItem="RevolvingStatementResponse"
+                           IsLoading="_isLoadingStatements"
+                           Error="_statementsError"
+                           Items="_statements"
+                           EmptyIcon="receipt"
+                           EmptyTitle="Sin estados de cuenta"
+                           OnRetry="LoadStatementsAsync">
+                    <HeaderTemplate>
+                        <th>Fecha</th>
+                        <th>Vencimiento</th>
+                        <th class="text-end">Saldo Nuevo</th>
+                        <th class="text-end">Pago Mínimo</th>
+                        <th>Pagado</th>
+                    </HeaderTemplate>
+                    <RowTemplate Context="s">
+                        <td>@s.StatementDate.ToString("dd/MM/yyyy")</td>
+                        <td>@s.DueDate.ToString("dd/MM/yyyy")</td>
+                        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(s.NewBalance, _summary.Currency)</td>
+                        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(s.MinimumPayment, _summary.Currency)</td>
+                        <td>
+                            @if (s.IsPaid)
+                            {
+                                <span class="cace-badge cace-badge-success">Pagado</span>
+                            }
+                            else
+                            {
+                                <span class="cace-badge cace-badge-warning">Pendiente</span>
+                            }
+                        </td>
+                    </RowTemplate>
+                </DataTable>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="cace-card p-4 mb-3">
+                <h3 class="h6 fw-bold cace-text-primary mb-3">Acciones</h3>
+
+                <button class="btn btn-primary w-100 mb-2" @onclick="ActivateAsync" disabled="@_isActionBusy">
+                    Activar Línea
+                </button>
+
+                <div class="border rounded p-3 mb-3">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Disponer Fondos</label>
+                    <input type="number" class="form-control mb-2" min="0.01" step="0.01" @bind="_drawAmount" />
+                    <input type="text" class="form-control mb-2" @bind="_drawDescription" placeholder="Descripción (opcional)" />
+                    <button class="btn btn-secondary text-white w-100" @onclick="DrawFundsAsync" disabled="@(_isActionBusy || _drawAmount <= 0)">
+                        Disponer
+                    </button>
+                </div>
+
+                <div class="border rounded p-3 mb-3">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Aplicar Pago</label>
+                    <input type="number" class="form-control mb-2" min="0.01" step="0.01" @bind="_paymentAmount" />
+                    <input type="text" class="form-control mb-2" @bind="_paymentMethod" placeholder="Método (opcional)" />
+                    <button class="btn btn-secondary text-white w-100" @onclick="ApplyPaymentAsync" disabled="@(_isActionBusy || _paymentAmount <= 0)">
+                        Pagar
+                    </button>
+                </div>
+
+                <div class="border rounded p-3 mb-3">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Motivo (para congelar / descongelar / cerrar)</label>
+                    <input type="text" class="form-control" @bind="_actionReason" />
+                </div>
+
+                <div class="d-flex gap-2 mb-2">
+                    <button class="btn btn-outline-warning flex-fill" @onclick="FreezeAsync" disabled="@_isActionBusy">
+                        Congelar
+                    </button>
+                    <button class="btn btn-outline-success flex-fill" @onclick="UnfreezeAsync" disabled="@_isActionBusy">
+                        Descongelar
+                    </button>
+                </div>
+
+                <button class="btn btn-outline-danger w-100" @onclick="() => _confirmingClose = true" disabled="@_isActionBusy">
+                    Cerrar Línea
+                </button>
+
+                @if (_actionError is not null)
+                {
+                    <div class="alert alert-danger small mt-3 mb-0">@_actionError.Message</div>
+                }
+                @if (_actionMessage is not null)
+                {
+                    <div class="alert alert-success small mt-3 mb-0">@_actionMessage</div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmDialog IsVisible="_confirmingClose"
+               Title="Cerrar línea de crédito"
+               Message="@($"Esta acción cierra la línea de forma permanente. Motivo: {(string.IsNullOrWhiteSpace(_actionReason) ? "(sin especificar)" : _actionReason)}")"
+               IsBusy="_isActionBusy"
+               OnConfirm="CloseAsync"
+               OnCancel="() => _confirmingClose = false" />
+
+@code {
+    [Parameter] public Guid CreditLineId { get; set; }
+
+    private bool _isLoading = true;
+    private ApiError? _loadError;
+    private RevolvingCreditSummaryResponse? _summary;
+
+    private bool _isLoadingTransactions;
+    private ApiError? _transactionsError;
+    private List<RevolvingTransactionResponse>? _transactions;
+
+    private bool _isLoadingStatements;
+    private ApiError? _statementsError;
+    private List<RevolvingStatementResponse>? _statements;
+
+    private bool _isActionBusy;
+    private ApiError? _actionError;
+    private string? _actionMessage;
+    private bool _confirmingClose;
+    private string _actionReason = string.Empty;
+
+    private decimal _drawAmount;
+    private string _drawDescription = string.Empty;
+    private decimal _paymentAmount;
+    private string _paymentMethod = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        await LoadTransactionsAsync();
+        await LoadStatementsAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _loadError = null;
+        var result = await RevolvingCreditService.GetSummaryAsync(CreditLineId);
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _summary = result.Data;
+        }
+        else
+        {
+            _loadError = result.Error;
+        }
+    }
+
+    private async Task LoadTransactionsAsync()
+    {
+        _isLoadingTransactions = true;
+        _transactionsError = null;
+        StateHasChanged();
+
+        var result = await RevolvingCreditService.GetTransactionsAsync(CreditLineId);
+        _isLoadingTransactions = false;
+
+        if (result.IsSuccess)
+        {
+            _transactions = result.Data;
+        }
+        else
+        {
+            _transactionsError = result.Error;
+        }
+    }
+
+    private async Task LoadStatementsAsync()
+    {
+        _isLoadingStatements = true;
+        _statementsError = null;
+        StateHasChanged();
+
+        var result = await RevolvingCreditService.GetStatementsAsync(CreditLineId);
+        _isLoadingStatements = false;
+
+        if (result.IsSuccess)
+        {
+            _statements = result.Data;
+        }
+        else
+        {
+            _statementsError = result.Error;
+        }
+    }
+
+    private async Task RefreshAllAsync()
+    {
+        await LoadAsync();
+        await LoadTransactionsAsync();
+    }
+
+    private async Task ActivateAsync()
+    {
+        _isActionBusy = true;
+        _actionError = null;
+        _actionMessage = null;
+
+        var result = await RevolvingCreditService.ActivateAsync(CreditLineId);
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _actionMessage = result.Data?.Message ?? "Línea activada.";
+            await RefreshAllAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task DrawFundsAsync()
+    {
+        _isActionBusy = true;
+        _actionError = null;
+        _actionMessage = null;
+
+        var result = await RevolvingCreditService.DrawFundsAsync(CreditLineId, new DrawFundsRequest
+        {
+            Amount = _drawAmount,
+            Description = string.IsNullOrWhiteSpace(_drawDescription) ? null : _drawDescription
+        });
+
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _actionMessage = result.Data?.Message ?? "Disposición aplicada.";
+            _drawAmount = 0;
+            _drawDescription = string.Empty;
+            await RefreshAllAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task ApplyPaymentAsync()
+    {
+        _isActionBusy = true;
+        _actionError = null;
+        _actionMessage = null;
+
+        var result = await RevolvingCreditService.ApplyPaymentAsync(CreditLineId, new ApplyRevolvingPaymentRequest
+        {
+            Amount = _paymentAmount,
+            PaymentMethod = string.IsNullOrWhiteSpace(_paymentMethod) ? null : _paymentMethod
+        });
+
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _actionMessage = result.Data?.Message ?? "Pago aplicado.";
+            _paymentAmount = 0;
+            _paymentMethod = string.Empty;
+            await RefreshAllAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task FreezeAsync()
+    {
+        _isActionBusy = true;
+        _actionError = null;
+        _actionMessage = null;
+
+        var result = await RevolvingCreditService.FreezeAsync(CreditLineId, new FreezeCreditLineRequest
+        {
+            Reason = string.IsNullOrWhiteSpace(_actionReason) ? null : _actionReason
+        });
+
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _actionMessage = result.Data?.Message ?? "Línea congelada.";
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task UnfreezeAsync()
+    {
+        _isActionBusy = true;
+        _actionError = null;
+        _actionMessage = null;
+
+        var result = await RevolvingCreditService.UnfreezeAsync(CreditLineId, new UnfreezeCreditLineRequest
+        {
+            Reason = string.IsNullOrWhiteSpace(_actionReason) ? null : _actionReason
+        });
+
+        _isActionBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _actionMessage = result.Data?.Message ?? "Línea descongelada.";
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        _isActionBusy = true;
+        _actionError = null;
+        _actionMessage = null;
+
+        var result = await RevolvingCreditService.CloseAsync(CreditLineId, new CloseCreditLineRequest
+        {
+            Reason = string.IsNullOrWhiteSpace(_actionReason) ? null : _actionReason
+        });
+
+        _isActionBusy = false;
+        _confirmingClose = false;
+
+        if (result.IsSuccess)
+        {
+            _actionMessage = result.Data?.Message ?? "Línea cerrada.";
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+}

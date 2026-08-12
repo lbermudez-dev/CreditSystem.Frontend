@@ -1,0 +1,121 @@
+@page "/creditos"
+@inject ILoanService LoanService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Créditos | CACE</PageTitle>
+
+<PageHeader Title="Préstamos por Socio" Icon="account_balance_wallet"
+            Breadcrumb="Créditos"
+            Subtitle="GET /api/v1/loans/customer/{externalCustomerId} — requiere el GUID del socio.">
+    <Actions>
+        <button class="btn btn-primary d-flex align-items-center gap-2" @onclick="IrANuevaSolicitud">
+            <span class="material-symbols-outlined" style="font-size:18px;">add</span>
+            Nueva Solicitud
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="cace-card p-4 mb-4">
+    <label class="form-label small fw-semibold text-uppercase text-muted" for="customerId">
+        GUID del Socio (externalCustomerId)
+    </label>
+    <div class="d-flex gap-2">
+        <input id="customerId" class="form-control" style="max-width:420px;"
+               placeholder="Ej. 3fa85f64-5717-4562-b3fc-2c963f66afa6" @bind="_externalCustomerId" @bind:event="oninput"
+               @onkeyup="OnKeyUp" />
+        <button class="btn btn-secondary text-white" @onclick="SearchAsync" disabled="@(_isLoading || string.IsNullOrWhiteSpace(_externalCustomerId))">
+            <span class="material-symbols-outlined" style="font-size:18px;">search</span>
+            Buscar
+        </button>
+    </div>
+    @if (_invalidId)
+    {
+        <p class="text-danger small mt-2 mb-0">El ID ingresado no es un GUID válido.</p>
+    }
+</div>
+
+@if (_hasSearched)
+{
+    <div class="cace-card">
+        <DataTable TItem="LoanSummaryResponse"
+                   IsLoading="_isLoading"
+                   Error="_error"
+                   Items="_loans"
+                   EmptyIcon="search_off"
+                   EmptyTitle="Sin préstamos para este socio"
+                   EmptyDescription="No se encontraron créditos asociados al ID ingresado."
+                   OnRetry="SearchAsync">
+            <HeaderTemplate>
+                <th>ID</th>
+                <th>Socio</th>
+                <th>Estado</th>
+                <th class="text-end">Principal</th>
+                <th class="text-end">Saldo Actual</th>
+                <th class="text-end">Tasa</th>
+                <th></th>
+            </HeaderTemplate>
+            <RowTemplate Context="loan">
+                <td class="cace-table-mono">@loan.LoanId.ToString()[..8]</td>
+                <td>@(loan.CustomerName ?? loan.CustomerId.ToString()[..8])</td>
+                <td><StatusBadge Status="@(loan.Status ?? "")" /></td>
+                <td class="text-end cace-table-mono">@CurrencyFormatter.Format(loan.Principal)</td>
+                <td class="text-end cace-table-mono fw-semibold">@CurrencyFormatter.Format(loan.CurrentBalance)</td>
+                <td class="text-end cace-table-mono">@loan.InterestRate.ToString("0.00")%</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => VerDetalle(loan.LoanId)">
+                        <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+                    </button>
+                </td>
+            </RowTemplate>
+        </DataTable>
+    </div>
+}
+
+@code {
+    private string _externalCustomerId = string.Empty;
+    private bool _isLoading;
+    private bool _hasSearched;
+    private bool _invalidId;
+    private ApiError? _error;
+    private List<LoanSummaryResponse>? _loans;
+
+    private async Task OnKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchAsync();
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        if (!Guid.TryParse(_externalCustomerId.Trim(), out var customerId))
+        {
+            _invalidId = true;
+            return;
+        }
+
+        _invalidId = false;
+        _isLoading = true;
+        _hasSearched = true;
+        _error = null;
+        StateHasChanged();
+
+        var result = await LoanService.GetByCustomerAsync(customerId);
+
+        if (result.IsSuccess)
+        {
+            _loans = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+            _loans = null;
+        }
+
+        _isLoading = false;
+    }
+
+    private void VerDetalle(Guid loanId) => NavigationManager.NavigateTo($"/creditos/{loanId}");
+    private void IrANuevaSolicitud() => NavigationManager.NavigateTo("/creditos/nuevo");
+}

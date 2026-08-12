@@ -1,0 +1,278 @@
+@page "/creditos/nuevo"
+@inject ILoanService LoanService
+@inject IProductService ProductService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Nueva Solicitud de Crédito | CACE</PageTitle>
+
+<PageHeader Title="Originación de Créditos" Icon="tune"
+            Breadcrumb="Créditos / Nueva Solicitud"
+            Subtitle="POST /api/v1/loans — el motor de reglas evalúa la solicitud contra el producto elegido." />
+
+@if (_productsError is not null)
+{
+    <div class="alert alert-danger d-flex gap-2 align-items-start mb-4">
+        <span class="material-symbols-outlined">error</span>
+        <div class="small">
+            No se pudieron cargar los productos de crédito (GET /api/v1/products): @_productsError.Message
+        </div>
+    </div>
+}
+
+<EditForm Model="_request" OnValidSubmit="SubmitAsync" class="row g-4">
+    <DataAnnotationsValidator />
+
+    <section class="col-12 col-lg-7 cace-card p-4">
+        <h3 class="h6 fw-bold cace-text-primary mb-3 d-flex align-items-center gap-2">
+            <span class="material-symbols-outlined">badge</span>
+            Datos del Socio y Producto
+        </h3>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">GUID del Socio (externalCustomerId)</label>
+            <InputText class="form-control" @bind-Value="_customerIdText" placeholder="3fa85f64-5717-4562-b3fc-2c963f66afa6" />
+            @if (_invalidCustomerId)
+            {
+                <p class="text-danger small mt-1 mb-0">Debe ser un GUID válido.</p>
+            }
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">Producto de Crédito</label>
+            @if (_isLoadingProducts)
+            {
+                <p class="small text-muted mb-0">Cargando productos...</p>
+            }
+            else if (_products is { Count: > 0 })
+            {
+                <InputSelect class="form-select" @bind-Value="_selectedProductId">
+                    <option value="">-- Seleccione un producto --</option>
+                    @foreach (var p in _products)
+                    {
+                        <option value="@p.Id">@p.Name (@CurrencyFormatter.Format(p.MinAmount)–@CurrencyFormatter.Format(p.MaxAmount))</option>
+                    }
+                </InputSelect>
+            }
+            else
+            {
+                <p class="small text-muted mb-0">No hay productos disponibles (GET /api/v1/products).</p>
+            }
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Método de Amortización</label>
+                <InputSelect class="form-select" @bind-Value="_request.AmortizationMethod">
+                    <option value="@AmortizationMethod.French">French (0)</option>
+                    <option value="@AmortizationMethod.German">German (1)</option>
+                    <option value="@AmortizationMethod.Flat">Flat (2)</option>
+                    <option value="@AmortizationMethod.American">American (3)</option>
+                    <option value="@AmortizationMethod.InterestOnly">InterestOnly (4)</option>
+                </InputSelect>
+                <p class="text-muted small mt-1 mb-0">Nombres inferidos — ver comentario en <code>AmortizationMethod.cs</code>.</p>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Moneda</label>
+                <InputText class="form-control" @bind-Value="_request.Currency" placeholder="NIO" />
+            </div>
+        </div>
+
+        <div class="row g-3 mt-1">
+            <div class="col-md-6">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Monto Solicitado</label>
+                <InputNumber class="form-control" @bind-Value="_request.Amount" />
+                <ValidationMessage For="() => _request.Amount" class="text-danger small" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Plazo (Meses)</label>
+                <InputNumber class="form-control" @bind-Value="_request.TermMonths" />
+                <ValidationMessage For="() => _request.TermMonths" class="text-danger small" />
+            </div>
+        </div>
+
+        <div class="row g-3 mt-1">
+            <div class="col-md-6">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Tipo de Tasa (rateType, opcional)</label>
+                <InputText class="form-control" @bind-Value="_request.RateType" placeholder="fixed / variable — no documentado" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Spread (opcional)</label>
+                <InputNumber class="form-control" @bind-Value="_request.Spread" />
+            </div>
+        </div>
+
+        <div class="mb-0 mt-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">ID de Tasa de Referencia (referenceRateId, opcional)</label>
+            <InputText class="form-control" @bind-Value="_request.ReferenceRateId" />
+        </div>
+
+        @if (_submitMessage is not null)
+        {
+            <div class="alert @(_submitSuccess ? "alert-success" : "alert-danger") mt-4 mb-0 small">
+                @_submitMessage
+                @if (_submitErrors is { Count: > 0 })
+                {
+                    <ul class="mb-0 mt-2">
+                        @foreach (var e in _submitErrors)
+                        {
+                            <li>@e</li>
+                        }
+                    </ul>
+                }
+                @if (_evaluationResults is { Count: > 0 })
+                {
+                    <ul class="mb-0 mt-2">
+                        @foreach (var r in _evaluationResults)
+                        {
+                            <li>
+                                <span class="material-symbols-outlined" style="font-size:14px;">@(r.Passed ? "check_circle" : "cancel")</span>
+                                @r.RuleName: @r.Message
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+
+        <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+            <button type="button" class="btn btn-outline-secondary" @onclick="Reset" disabled="@_isSubmitting">
+                Limpiar
+            </button>
+            <button type="submit" class="btn btn-primary d-flex align-items-center gap-2" disabled="@_isSubmitting">
+                @if (_isSubmitting)
+                {
+                    <span class="spinner-border spinner-border-sm"></span>
+                }
+                else
+                {
+                    <span class="material-symbols-outlined" style="font-size:18px;">check_circle</span>
+                }
+                Crear Solicitud
+            </button>
+        </div>
+    </section>
+
+    <aside class="col-12 col-lg-5">
+        <div class="cace-bg-primary rounded p-4 h-100">
+            <span class="small text-uppercase opacity-75">Monto Solicitado</span>
+            <h3 class="display-6 fw-bold mb-3">@CurrencyFormatter.Format(_request.Amount, _request.Currency)</h3>
+            <div class="row g-2">
+                <div class="col-6">
+                    <div class="bg-white bg-opacity-10 rounded p-3">
+                        <span class="d-block small opacity-75">Plazo</span>
+                        <span class="fw-bold">@_request.TermMonths meses</span>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="bg-white bg-opacity-10 rounded p-3">
+                        <span class="d-block small opacity-75">Spread</span>
+                        <span class="fw-bold">@(_request.Spread?.ToString("0.00") ?? "—")%</span>
+                    </div>
+                </div>
+            </div>
+            <p class="small mt-4 mb-0 opacity-75">
+                La tasa aprobada, el desglose de interés y la tabla de
+                amortización se calculan en el servidor al crear el
+                contrato y estarán disponibles en el detalle del préstamo
+                (incluyendo descarga en PDF/Excel vía
+                <code>/documents/amortization-table</code>).
+            </p>
+        </div>
+    </aside>
+</EditForm>
+
+@code {
+    private CreateContractCommand _request = new()
+    {
+        Currency = "NIO",
+        TermMonths = 18,
+        Amount = 40000,
+        AmortizationMethod = AmortizationMethod.French
+    };
+
+    private string _customerIdText = string.Empty;
+    private bool _invalidCustomerId;
+
+    private List<ProductResponse>? _products;
+    private bool _isLoadingProducts = true;
+    private ApiError? _productsError;
+    private string _selectedProductId = string.Empty;
+
+    private bool _isSubmitting;
+    private bool _submitSuccess;
+    private string? _submitMessage;
+    private List<string>? _submitErrors;
+    private List<RuleEvaluationResult>? _evaluationResults;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoadingProducts = true;
+        var result = await ProductService.GetAllAsync();
+        _isLoadingProducts = false;
+
+        if (result.IsSuccess)
+        {
+            _products = result.Data;
+        }
+        else
+        {
+            _productsError = result.Error;
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (!Guid.TryParse(_customerIdText.Trim(), out var customerId))
+        {
+            _invalidCustomerId = true;
+            return;
+        }
+
+        if (!Guid.TryParse(_selectedProductId, out var productId))
+        {
+            _submitSuccess = false;
+            _submitMessage = "Debe seleccionar un producto de crédito.";
+            return;
+        }
+
+        _invalidCustomerId = false;
+        _isSubmitting = true;
+        _submitMessage = null;
+        _submitErrors = null;
+        _evaluationResults = null;
+
+        _request.ExternalCustomerId = customerId;
+        _request.ProductId = productId;
+
+        var result = await LoanService.CreateAsync(_request);
+
+        _isSubmitting = false;
+
+        if (result.IsSuccess && result.Data is { Success: true, ContractId: not null })
+        {
+            NavigationManager.NavigateTo($"/creditos/{result.Data.ContractId}");
+            return;
+        }
+
+        _submitSuccess = false;
+        _submitMessage = result.Data?.Message ?? result.Error?.Message ?? "No fue posible crear la solicitud.";
+        _submitErrors = result.Data?.Errors;
+        _evaluationResults = result.Data?.EvaluationResults;
+    }
+
+    private void Reset()
+    {
+        _request = new CreateContractCommand
+        {
+            Currency = "NIO",
+            TermMonths = 18,
+            Amount = 40000,
+            AmortizationMethod = AmortizationMethod.French
+        };
+        _customerIdText = string.Empty;
+        _selectedProductId = string.Empty;
+        _submitMessage = null;
+        _submitErrors = null;
+        _evaluationResults = null;
+    }
+}

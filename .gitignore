@@ -1,0 +1,12 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Bootstrap restaurado via libman (no versionar binarios de terceros)
+Src/CreditSystem.Frontend.Web/wwwroot/lib/bootstrap/
+
+## Secrets locales
+appsettings.*.local.json

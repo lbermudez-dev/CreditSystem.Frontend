@@ -1,0 +1,55 @@
+@* Paginacion client-side generica. Los endpoints documentados en los .md
+   no confirman soporte de paginacion server-side (ver PagedResponse.cs),
+   por lo que este componente pagina en memoria sobre la lista ya
+   cargada. Si el backend real confirma paginacion server-side, sustituir
+   por parametros Page/TotalPages controlados por el servicio. *@
+
+@if (TotalPages > 1)
+{
+    <nav class="d-flex justify-content-between align-items-center mt-3">
+        <span class="small text-muted">
+            Mostrando @StartItem-@EndItem de @TotalItems
+        </span>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item @(CurrentPage == 1 ? "disabled" : "")">
+                <button class="page-link" @onclick="() => GoTo(CurrentPage - 1)">
+                    <span class="material-symbols-outlined" style="font-size:16px;">chevron_left</span>
+                </button>
+            </li>
+            @for (var i = 1; i <= TotalPages; i++)
+            {
+                var pageNumber = i;
+                <li class="page-item @(CurrentPage == pageNumber ? "active" : "")">
+                    <button class="page-link" @onclick="() => GoTo(pageNumber)">@pageNumber</button>
+                </li>
+            }
+            <li class="page-item @(CurrentPage == TotalPages ? "disabled" : "")">
+                <button class="page-link" @onclick="() => GoTo(CurrentPage + 1)">
+                    <span class="material-symbols-outlined" style="font-size:16px;">chevron_right</span>
+                </button>
+            </li>
+        </ul>
+    </nav>
+}
+
+@code {
+    [Parameter] public int CurrentPage { get; set; } = 1;
+    [Parameter] public int PageSize { get; set; } = 10;
+    [Parameter] public int TotalItems { get; set; }
+    [Parameter] public EventCallback<int> CurrentPageChanged { get; set; }
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalItems / (double)PageSize));
+    private int StartItem => TotalItems == 0 ? 0 : ((CurrentPage - 1) * PageSize) + 1;
+    private int EndItem => Math.Min(CurrentPage * PageSize, TotalItems);
+
+    private Task GoTo(int page)
+    {
+        if (page < 1 || page > TotalPages || page == CurrentPage)
+        {
+            return Task.CompletedTask;
+        }
+
+        CurrentPage = page;
+        return CurrentPageChanged.InvokeAsync(page);
+    }
+}

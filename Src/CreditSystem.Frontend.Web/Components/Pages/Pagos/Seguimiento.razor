@@ -1,0 +1,283 @@
+@page "/pagos"
+@inject IPaymentService PaymentService
+
+<PageTitle>Pagos Asíncronos | CACE</PageTitle>
+
+<PageHeader Title="Pagos Asíncronos" Icon="sync_alt"
+            Subtitle="Grupo 'Async Payments' del swagger — intake desacoplado por Outbox/RabbitMQ (202 Accepted + seguimiento por estado). Alternativa al pago síncrono con idempotencia disponible en el detalle de cada préstamo/línea." />
+
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <button class="nav-link @(_tab == "prestamo" ? "active" : "")" @onclick='() => _tab = "prestamo"'>
+            Pago de Préstamo
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link @(_tab == "revolvente" ? "active" : "")" @onclick='() => _tab = "revolvente"'>
+            Pago Revolvente
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link @(_tab == "estado" ? "active" : "")" @onclick='() => _tab = "estado"'>
+            Consultar Estado
+        </button>
+    </li>
+</ul>
+
+@if (_tab == "prestamo")
+{
+    <div class="cace-card p-4" style="max-width:560px;">
+        <h3 class="h6 fw-bold cace-text-primary mb-3">POST /api/v1/payments</h3>
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">GUID del Préstamo (loanId)</label>
+            <input class="form-control" @bind="_loanRequest.LoanId" />
+        </div>
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">GUID del Socio (customerId)</label>
+            <input class="form-control" @bind="_loanRequest.CustomerId" />
+        </div>
+        <div class="row g-3">
+            <div class="col-6">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Monto</label>
+                <input type="number" class="form-control" min="0.01" step="0.01" @bind="_loanRequest.Amount" />
+            </div>
+            <div class="col-6">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Moneda</label>
+                <input class="form-control" @bind="_loanRequest.Currency" placeholder="NIO" />
+            </div>
+        </div>
+        <div class="mt-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">Método de Pago (opcional)</label>
+            <input class="form-control" @bind="_loanRequest.PaymentMethod" />
+        </div>
+
+        <button class="btn btn-primary w-100 mt-4 d-flex align-items-center justify-content-center gap-2"
+                @onclick="SubmitLoanPaymentAsync" disabled="@(_isSubmitting || _loanRequest.Amount <= 0)">
+            @if (_isSubmitting) { <span class="spinner-border spinner-border-sm"></span> }
+            Enviar Pago
+        </button>
+
+        @if (_loanAccepted is not null)
+        {
+            <div class="alert @(_loanAccepted.IsAccepted ? "alert-success" : "alert-danger") small mt-3 mb-0">
+                @if (_loanAccepted.IsAccepted)
+                {
+                    <div><strong>Aceptado (202).</strong> paymentId: <span class="cace-table-mono">@_loanAccepted.PaymentId</span></div>
+                    <div>Estado inicial: @_loanAccepted.Status</div>
+                    @if (!string.IsNullOrWhiteSpace(_loanAccepted.TrackingUrl))
+                    {
+                        <div>Tracking: @_loanAccepted.TrackingUrl</div>
+                    }
+                }
+                else
+                {
+                    @(_loanAccepted.ErrorMessage ?? "No fue posible aceptar el pago.")
+                }
+            </div>
+        }
+        @if (_submitError is not null)
+        {
+            <div class="alert alert-danger small mt-3 mb-0">@_submitError.Message</div>
+        }
+    </div>
+}
+else if (_tab == "revolvente")
+{
+    <div class="cace-card p-4" style="max-width:560px;">
+        <h3 class="h6 fw-bold cace-text-primary mb-3">POST /api/v1/payments/revolving</h3>
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">GUID de la Línea (creditLineId)</label>
+            <input class="form-control" @bind="_revolvingRequest.CreditLineId" />
+        </div>
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">GUID del Socio (customerId)</label>
+            <input class="form-control" @bind="_revolvingRequest.CustomerId" />
+        </div>
+        <div class="row g-3">
+            <div class="col-6">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Monto</label>
+                <input type="number" class="form-control" min="0.01" step="0.01" @bind="_revolvingRequest.Amount" />
+            </div>
+            <div class="col-6">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Moneda</label>
+                <input class="form-control" @bind="_revolvingRequest.Currency" placeholder="NIO" />
+            </div>
+        </div>
+        <div class="mt-3">
+            <label class="form-label small fw-semibold text-uppercase text-muted">Método de Pago (opcional)</label>
+            <input class="form-control" @bind="_revolvingRequest.PaymentMethod" />
+        </div>
+
+        <button class="btn btn-primary w-100 mt-4 d-flex align-items-center justify-content-center gap-2"
+                @onclick="SubmitRevolvingPaymentAsync" disabled="@(_isSubmitting || _revolvingRequest.Amount <= 0)">
+            @if (_isSubmitting) { <span class="spinner-border spinner-border-sm"></span> }
+            Enviar Pago
+        </button>
+
+        @if (_revolvingAccepted is not null)
+        {
+            <div class="alert @(_revolvingAccepted.IsAccepted ? "alert-success" : "alert-danger") small mt-3 mb-0">
+                @if (_revolvingAccepted.IsAccepted)
+                {
+                    <div><strong>Aceptado (202).</strong> paymentId: <span class="cace-table-mono">@_revolvingAccepted.PaymentId</span></div>
+                    <div>Estado inicial: @_revolvingAccepted.Status</div>
+                    @if (!string.IsNullOrWhiteSpace(_revolvingAccepted.TrackingUrl))
+                    {
+                        <div>Tracking: @_revolvingAccepted.TrackingUrl</div>
+                    }
+                }
+                else
+                {
+                    @(_revolvingAccepted.ErrorMessage ?? "No fue posible aceptar el pago.")
+                }
+            </div>
+        }
+        @if (_submitError is not null)
+        {
+            <div class="alert alert-danger small mt-3 mb-0">@_submitError.Message</div>
+        }
+    </div>
+}
+else if (_tab == "estado")
+{
+    <div class="cace-card p-4" style="max-width:640px;">
+        <h3 class="h6 fw-bold cace-text-primary mb-3">GET /api/v1/payments/{paymentId}/status</h3>
+        <div class="d-flex gap-2">
+            <input class="form-control" placeholder="GUID del Pago (paymentId)" @bind="_statusPaymentIdText" @bind:event="oninput" @onkeyup="OnStatusKeyUp" />
+            <button class="btn btn-secondary text-white" @onclick="CheckStatusAsync" disabled="@_isCheckingStatus">
+                <span class="material-symbols-outlined" style="font-size:18px;">search</span>
+            </button>
+        </div>
+        @if (_invalidStatusId)
+        {
+            <p class="text-danger small mt-2 mb-0">El ID ingresado no es un GUID válido.</p>
+        }
+
+        @if (_isCheckingStatus)
+        {
+            <LoadingIndicator Message="Consultando estado..." />
+        }
+        else if (_statusError is not null)
+        {
+            <ErrorState Error="_statusError" OnRetry="CheckStatusAsync" />
+        }
+        else if (_status is not null)
+        {
+            <dl class="row mt-4 mb-0">
+                <dt class="col-sm-5">Estado</dt>
+                <dd class="col-sm-7"><span class="cace-badge cace-badge-info">@_status.Status</span></dd>
+                <dt class="col-sm-5">Monto</dt>
+                <dd class="col-sm-7">@CurrencyFormatter.Format(_status.Amount, _status.Currency)</dd>
+                <dt class="col-sm-5">Aceptado</dt>
+                <dd class="col-sm-7">@_status.AcceptedAt.ToString("dd/MM/yyyy HH:mm")</dd>
+                <dt class="col-sm-5">Procesado</dt>
+                <dd class="col-sm-7">@(_status.ProcessedAt?.ToString("dd/MM/yyyy HH:mm") ?? "—")</dd>
+                @if (_status.PrincipalPaid is not null)
+                {
+                    <dt class="col-sm-5">Capital Aplicado</dt>
+                    <dd class="col-sm-7">@CurrencyFormatter.Format(_status.PrincipalPaid.Value, _status.Currency)</dd>
+                }
+                @if (_status.InterestPaid is not null)
+                {
+                    <dt class="col-sm-5">Interés Aplicado</dt>
+                    <dd class="col-sm-7">@CurrencyFormatter.Format(_status.InterestPaid.Value, _status.Currency)</dd>
+                }
+                @if (_status.NewBalance is not null)
+                {
+                    <dt class="col-sm-5">Nuevo Saldo</dt>
+                    <dd class="col-sm-7 fw-semibold">@CurrencyFormatter.Format(_status.NewBalance.Value, _status.Currency)</dd>
+                }
+                @if (!string.IsNullOrWhiteSpace(_status.ErrorMessage))
+                {
+                    <dt class="col-sm-5">Error</dt>
+                    <dd class="col-sm-7 text-danger">@_status.ErrorMessage</dd>
+                }
+            </dl>
+        }
+    </div>
+}
+
+@code {
+    private string _tab = "prestamo";
+    private bool _isSubmitting;
+    private ApiError? _submitError;
+
+    private SubmitPaymentRequest _loanRequest = new() { Currency = "NIO" };
+    private PaymentAcceptedResponse? _loanAccepted;
+
+    private SubmitRevolvingPaymentRequest _revolvingRequest = new() { Currency = "NIO" };
+    private RevolvingPaymentAcceptedResponse? _revolvingAccepted;
+
+    private string _statusPaymentIdText = string.Empty;
+    private bool _invalidStatusId;
+    private bool _isCheckingStatus;
+    private ApiError? _statusError;
+    private PaymentStatusResponse? _status;
+
+    private async Task SubmitLoanPaymentAsync()
+    {
+        _isSubmitting = true;
+        _submitError = null;
+        _loanAccepted = null;
+
+        var result = await PaymentService.SubmitLoanPaymentAsync(_loanRequest);
+        _isSubmitting = false;
+
+        if (result.IsSuccess)
+        {
+            _loanAccepted = result.Data;
+        }
+        else
+        {
+            _submitError = result.Error;
+        }
+    }
+
+    private async Task SubmitRevolvingPaymentAsync()
+    {
+        _isSubmitting = true;
+        _submitError = null;
+        _revolvingAccepted = null;
+
+        var result = await PaymentService.SubmitRevolvingPaymentAsync(_revolvingRequest);
+        _isSubmitting = false;
+
+        if (result.IsSuccess)
+        {
+            _revolvingAccepted = result.Data;
+        }
+        else
+        {
+            _submitError = result.Error;
+        }
+    }
+
+    private Task OnStatusKeyUp(KeyboardEventArgs e) =>
+        e.Key == "Enter" ? CheckStatusAsync() : Task.CompletedTask;
+
+    private async Task CheckStatusAsync()
+    {
+        if (!Guid.TryParse(_statusPaymentIdText.Trim(), out var paymentId))
+        {
+            _invalidStatusId = true;
+            return;
+        }
+
+        _invalidStatusId = false;
+        _isCheckingStatus = true;
+        _statusError = null;
+        StateHasChanged();
+
+        var result = await PaymentService.GetStatusAsync(paymentId);
+        _isCheckingStatus = false;
+
+        if (result.IsSuccess)
+        {
+            _status = result.Data;
+        }
+        else
+        {
+            _statusError = result.Error;
+        }
+    }
+}

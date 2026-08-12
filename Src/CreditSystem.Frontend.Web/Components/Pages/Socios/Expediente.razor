@@ -1,0 +1,271 @@
+@page "/socios/{ExternalId:guid}"
+@inject IMemberService MemberService
+@inject ILoanService LoanService
+@inject IRevolvingCreditService RevolvingCreditService
+
+<PageTitle>Expediente del Socio | CACE</PageTitle>
+
+<PageHeader Title="@($"Socio #{ExternalId.ToString()[..8]}")" Icon="person_search"
+            Breadcrumb="Socios / Expediente"
+            Subtitle="GET /api/v1/members/{externalId} + /shares + /social-capital (módulo Cooperative Members real)." />
+
+@if (_isLoadingProfile)
+{
+    <LoadingIndicator Message="Cargando perfil del socio..." />
+}
+else if (_profileError is not null)
+{
+    <ErrorState Error="_profileError" OnRetry="LoadProfileAsync" />
+}
+else if (_profile is not null)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <KpiCard Label="Estado" Value="@(_profile.Status ?? "—")" Accent="secondary" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="N° de Socio" Value="@(_profile.MemberNumber ?? "—")" Accent="secondary" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Aportaciones" Value="@CurrencyFormatter.Format(_profile.TotalSharesAmount, _profile.SharesCurrency)" Accent="success" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Capital Social" Value="@(_isLoadingSocialCapital ? "…" : (_socialCapital is not null ? CurrencyFormatter.Format(_socialCapital.SocialCapitalBalance) : "—"))" Accent="success" />
+        </div>
+    </div>
+}
+
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <button class="nav-link @(_activeTab == "creditos" ? "active" : "")" @onclick='() => _activeTab = "creditos"'>
+            Préstamos
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link @(_activeTab == "revolventes" ? "active" : "")" @onclick='() => _activeTab = "revolventes"'>
+            Líneas Revolventes
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link @(_activeTab == "aportaciones" ? "active" : "")" @onclick='() => _activeTab = "aportaciones"'>
+            Aportaciones
+        </button>
+    </li>
+</ul>
+
+@if (_activeTab == "creditos")
+{
+    <div class="cace-card p-4">
+        <DataTable TItem="LoanSummaryResponse"
+                   IsLoading="_isLoadingLoans"
+                   Error="_loansError"
+                   Items="_loans"
+                   EmptyIcon="account_balance_wallet"
+                   EmptyTitle="Sin créditos registrados"
+                   OnRetry="LoadLoansAsync">
+            <HeaderTemplate>
+                <th>ID</th>
+                <th>Estado</th>
+                <th class="text-end">Principal</th>
+                <th class="text-end">Saldo Actual</th>
+                <th></th>
+            </HeaderTemplate>
+            <RowTemplate Context="loan">
+                <td class="cace-table-mono">@loan.LoanId.ToString()[..8]</td>
+                <td><StatusBadge Status="@(loan.Status ?? "")" /></td>
+                <td class="text-end cace-table-mono">@CurrencyFormatter.Format(loan.Principal)</td>
+                <td class="text-end cace-table-mono fw-semibold">@CurrencyFormatter.Format(loan.CurrentBalance)</td>
+                <td class="text-end">
+                    <a class="btn btn-sm btn-outline-secondary" href="@($"/creditos/{loan.LoanId}")">
+                        <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+                    </a>
+                </td>
+            </RowTemplate>
+        </DataTable>
+    </div>
+}
+else if (_activeTab == "revolventes")
+{
+    <div class="cace-card p-4">
+        <DataTable TItem="RevolvingCreditSummaryResponse"
+                   IsLoading="_isLoadingLines"
+                   Error="_linesError"
+                   Items="_lines"
+                   EmptyIcon="credit_card_off"
+                   EmptyTitle="Sin líneas revolventes registradas"
+                   OnRetry="LoadLinesAsync">
+            <HeaderTemplate>
+                <th>ID</th>
+                <th>Estado</th>
+                <th class="text-end">Límite</th>
+                <th class="text-end">Disponible</th>
+                <th></th>
+            </HeaderTemplate>
+            <RowTemplate Context="line">
+                <td class="cace-table-mono">@line.CreditLineId.ToString()[..8]</td>
+                <td><StatusBadge Status="@(line.Status ?? "")" /></td>
+                <td class="text-end cace-table-mono">@CurrencyFormatter.Format(line.CreditLimit, line.Currency)</td>
+                <td class="text-end cace-table-mono fw-semibold">@CurrencyFormatter.Format(line.AvailableCredit, line.Currency)</td>
+                <td class="text-end">
+                    <a class="btn btn-sm btn-outline-secondary" href="@($"/revolventes/{line.CreditLineId}")">
+                        <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+                    </a>
+                </td>
+            </RowTemplate>
+        </DataTable>
+    </div>
+}
+else if (_activeTab == "aportaciones")
+{
+    <div class="cace-card p-4">
+        @if (_isLoadingShares)
+        {
+            <LoadingIndicator Message="Cargando aportaciones..." />
+        }
+        else if (_sharesError is not null)
+        {
+            <ErrorState Error="_sharesError" OnRetry="LoadSharesAsync" />
+        }
+        else if (_shares is not null)
+        {
+            <dl class="row mb-0">
+                <dt class="col-sm-4">Total de Aportaciones</dt>
+                <dd class="col-sm-8">@CurrencyFormatter.Format(_shares.TotalSharesAmount, _shares.SharesCurrency)</dd>
+                <dt class="col-sm-4">Número de Contribuciones</dt>
+                <dd class="col-sm-8">@_shares.NumberOfContributions</dd>
+                <dt class="col-sm-4">Última Contribución</dt>
+                <dd class="col-sm-8">@(_shares.LastContributionDate?.ToString("dd/MM/yyyy") ?? "—")</dd>
+            </dl>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid ExternalId { get; set; }
+
+    private string _activeTab = "creditos";
+
+    private bool _isLoadingProfile = true;
+    private ApiError? _profileError;
+    private MemberProfileResponse? _profile;
+
+    private bool _isLoadingSocialCapital = true;
+    private SocialCapitalBalanceResponse? _socialCapital;
+
+    private bool _isLoadingShares = true;
+    private ApiError? _sharesError;
+    private MemberSharesResponse? _shares;
+
+    private bool _isLoadingLoans = true;
+    private ApiError? _loansError;
+    private List<LoanSummaryResponse>? _loans;
+
+    private bool _isLoadingLines = true;
+    private ApiError? _linesError;
+    private List<RevolvingCreditSummaryResponse>? _lines;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProfileAsync();
+        _ = LoadSocialCapitalAsync();
+        _ = LoadSharesAsync();
+        _ = LoadLoansAsync();
+        _ = LoadLinesAsync();
+    }
+
+    private async Task LoadProfileAsync()
+    {
+        _isLoadingProfile = true;
+        _profileError = null;
+        StateHasChanged();
+
+        var result = await MemberService.GetProfileAsync(ExternalId);
+        _isLoadingProfile = false;
+
+        if (result.IsSuccess)
+        {
+            _profile = result.Data;
+        }
+        else
+        {
+            _profileError = result.Error;
+        }
+    }
+
+    private async Task LoadSocialCapitalAsync()
+    {
+        _isLoadingSocialCapital = true;
+        var result = await MemberService.GetSocialCapitalBalanceAsync(ExternalId);
+        _isLoadingSocialCapital = false;
+
+        if (result.IsSuccess)
+        {
+            _socialCapital = result.Data;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task LoadSharesAsync()
+    {
+        _isLoadingShares = true;
+        _sharesError = null;
+        StateHasChanged();
+
+        var result = await MemberService.GetSharesAsync(ExternalId);
+        _isLoadingShares = false;
+
+        if (result.IsSuccess)
+        {
+            _shares = result.Data;
+        }
+        else
+        {
+            _sharesError = result.Error;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task LoadLoansAsync()
+    {
+        _isLoadingLoans = true;
+        _loansError = null;
+        StateHasChanged();
+
+        var result = await LoanService.GetByCustomerAsync(ExternalId);
+        _isLoadingLoans = false;
+
+        if (result.IsSuccess)
+        {
+            _loans = result.Data;
+        }
+        else
+        {
+            _loansError = result.Error;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task LoadLinesAsync()
+    {
+        _isLoadingLines = true;
+        _linesError = null;
+        StateHasChanged();
+
+        var result = await RevolvingCreditService.GetByCustomerAsync(ExternalId);
+        _isLoadingLines = false;
+
+        if (result.IsSuccess)
+        {
+            _lines = result.Data;
+        }
+        else
+        {
+            _linesError = result.Error;
+        }
+
+        StateHasChanged();
+    }
+}

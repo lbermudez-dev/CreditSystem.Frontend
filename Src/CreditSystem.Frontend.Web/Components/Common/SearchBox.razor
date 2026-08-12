@@ -1,0 +1,20 @@
+<div class="position-relative">
+    <span class="material-symbols-outlined position-absolute text-muted" style="left:10px; top:8px; font-size:20px;">search</span>
+    <input type="search"
+           class="form-control ps-5"
+           placeholder="@Placeholder"
+           value="@Value"
+           @oninput="OnInput" />
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public string Placeholder { get; set; } = "Buscar...";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private Task OnInput(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString() ?? string.Empty;
+        return ValueChanged.InvokeAsync(Value);
+    }
+}

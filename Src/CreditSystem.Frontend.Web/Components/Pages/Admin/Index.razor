@@ -1,0 +1,153 @@
+@page "/admin"
+@inject IAdminService AdminService
+
+<PageTitle>Administración | CACE</PageTitle>
+
+<PageHeader Title="Procesos Automáticos" Icon="settings_suggest"
+            Subtitle="Grupo 'Admin' del swagger — dispara manualmente los jobs nocturnos (acumulación de interés, detección de mora, estados de cuenta). Perfil técnico/soporte." />
+
+<div class="alert alert-warning d-flex gap-2 align-items-start mb-4" role="alert">
+    <span class="material-symbols-outlined">warning</span>
+    <div class="small">
+        Estas operaciones ejecutan de inmediato procesos que normalmente corren de forma programada
+        (madrugada) sobre toda la cartera. Úsense solo para soporte/depuración.
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    @foreach (var job in _globalJobs)
+    {
+        <div class="col-md-6 col-xl-4">
+            <div class="cace-card p-4 h-100 d-flex flex-column">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="material-symbols-outlined text-primary">@job.Icon</span>
+                    <h3 class="h6 fw-bold cace-text-primary mb-0">@job.Title</h3>
+                </div>
+                <p class="small text-muted flex-grow-1">@job.Description</p>
+                <button class="btn btn-outline-primary d-flex align-items-center justify-content-center gap-2"
+                        @onclick="() => RunAsync(job.Key, () => job.Run())" disabled="@(_busyKey is not null)">
+                    @if (_busyKey == job.Key)
+                    {
+                        <span class="spinner-border spinner-border-sm"></span>
+                    }
+                    Ejecutar Ahora
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="cace-card p-4">
+            <h3 class="h6 fw-bold cace-text-primary mb-3">Acumular Interés de un Préstamo</h3>
+            <p class="small text-muted">POST /api/v1/admin/loans/{id}/accrue-interest</p>
+            <div class="d-flex gap-2">
+                <input class="form-control" placeholder="GUID del préstamo" @bind="_loanIdText" />
+                <button class="btn btn-secondary text-white" @onclick="AccrueLoanAsync" disabled="@(_busyKey is not null)">
+                    @if (_busyKey == "loan") { <span class="spinner-border spinner-border-sm"></span> } else { <span class="material-symbols-outlined" style="font-size:18px;">play_arrow</span> }
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="cace-card p-4">
+            <h3 class="h6 fw-bold cace-text-primary mb-3">Línea Revolvente — Interés / Estado de Cuenta</h3>
+            <p class="small text-muted">POST /api/v1/admin/revolving-credits/{id}/accrue-interest y .../generate-statement</p>
+            <div class="d-flex gap-2 mb-2">
+                <input class="form-control" placeholder="GUID de la línea" @bind="_creditLineIdText" />
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary flex-fill" @onclick="AccrueCreditLineAsync" disabled="@(_busyKey is not null)">
+                    @if (_busyKey == "line-interest") { <span class="spinner-border spinner-border-sm"></span> }
+                    Acumular Interés
+                </button>
+                <button class="btn btn-outline-secondary flex-fill" @onclick="GenerateStatementAsync" disabled="@(_busyKey is not null)">
+                    @if (_busyKey == "line-statement") { <span class="spinner-border spinner-border-sm"></span> }
+                    Generar Estado
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (_message is not null)
+{
+    <div class="alert @(_success ? "alert-success" : "alert-danger") small mt-4 mb-0">@_message</div>
+}
+
+@code {
+    private sealed record JobDefinition(string Key, string Title, string Description, string Icon, Func<Task<ApiResult>> Run);
+
+    private string? _busyKey;
+    private bool _success;
+    private string? _message;
+
+    private string _loanIdText = string.Empty;
+    private string _creditLineIdText = string.Empty;
+
+    private List<JobDefinition> _globalJobs = new();
+
+    protected override void OnInitialized()
+    {
+        _globalJobs =
+        [
+            new JobDefinition("interest", "Acumulación de Interés", "Calcula y registra el interés generado sobre todos los préstamos activos.", "trending_up", () => AdminService.RunInterestAccrualJobAsync()),
+            new JobDefinition("payment-missed", "Detección de Mora", "Identifica cuotas vencidas y cambia el estado de los préstamos a Moroso.", "warning", () => AdminService.RunPaymentMissedJobAsync()),
+            new JobDefinition("revolving-interest", "Interés Revolvente", "Acumula interés diario sobre los saldos de líneas de crédito activas.", "credit_card", () => AdminService.RunRevolvingInterestAccrualJobAsync()),
+            new JobDefinition("revolving-missed", "Mora Revolvente", "Detecta incumplimiento de pago mínimo y congela líneas automáticamente.", "block", () => AdminService.RunRevolvingPaymentMissedJobAsync()),
+            new JobDefinition("statement", "Generación de Estados de Cuenta", "Genera el estado de cuenta de cada línea revolvente en su fecha de corte.", "receipt_long", () => AdminService.RunStatementGenerationJobAsync()),
+        ];
+    }
+
+    private async Task RunAsync(string key, Func<Task<ApiResult>> action)
+    {
+        _busyKey = key;
+        _message = null;
+        StateHasChanged();
+
+        var result = await action();
+        _busyKey = null;
+
+        _success = result.IsSuccess;
+        _message = result.IsSuccess
+            ? "Proceso ejecutado correctamente."
+            : result.Error?.Message ?? "No fue posible ejecutar el proceso.";
+    }
+
+    private Task AccrueLoanAsync()
+    {
+        if (!Guid.TryParse(_loanIdText.Trim(), out var loanId))
+        {
+            _success = false;
+            _message = "El ID del préstamo no es un GUID válido.";
+            return Task.CompletedTask;
+        }
+
+        return RunAsync("loan", () => AdminService.AccrueInterestForLoanAsync(loanId));
+    }
+
+    private Task AccrueCreditLineAsync()
+    {
+        if (!Guid.TryParse(_creditLineIdText.Trim(), out var creditLineId))
+        {
+            _success = false;
+            _message = "El ID de la línea no es un GUID válido.";
+            return Task.CompletedTask;
+        }
+
+        return RunAsync("line-interest", () => AdminService.AccrueInterestForCreditLineAsync(creditLineId));
+    }
+
+    private Task GenerateStatementAsync()
+    {
+        if (!Guid.TryParse(_creditLineIdText.Trim(), out var creditLineId))
+        {
+            _success = false;
+            _message = "El ID de la línea no es un GUID válido.";
+            return Task.CompletedTask;
+        }
+
+        return RunAsync("line-statement", () => AdminService.GenerateStatementForCreditLineAsync(creditLineId));
+    }
+}

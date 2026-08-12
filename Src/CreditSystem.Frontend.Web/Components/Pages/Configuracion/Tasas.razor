@@ -1,0 +1,146 @@
+@page "/tasas"
+@inject IReferenceRateService ReferenceRateService
+
+<PageTitle>Tasas de Referencia | CACE</PageTitle>
+
+<PageHeader Title="Tasas de Referencia" Icon="percent"
+            Subtitle="Grupo 'Reference Rates' del swagger. El 'id' de la tasa es texto libre (ej. TBP_CRC), no GUID — los préstamos con tasa variable indexados a esta referencia recalculan su tasa efectiva automáticamente cuando se actualiza aquí." />
+
+<div class="cace-card p-4 mb-4" style="max-width:520px;">
+    <label class="form-label small fw-semibold text-uppercase text-muted">ID de la Tasa (ej. TBP_CRC)</label>
+    <div class="d-flex gap-2">
+        <input class="form-control" @bind="_rateId" @bind:event="oninput" @onkeyup="OnKeyUp" placeholder="TBP_CRC" />
+        <button class="btn btn-secondary text-white" @onclick="LoadAsync" disabled="@(_isLoading || string.IsNullOrWhiteSpace(_rateId))">
+            <span class="material-symbols-outlined" style="font-size:18px;">search</span>
+        </button>
+    </div>
+</div>
+
+@if (_isLoading)
+{
+    <LoadingIndicator Message="Consultando tasa..." />
+}
+else if (_loadError is not null)
+{
+    <ErrorState Error="_loadError" OnRetry="LoadAsync" />
+}
+else if (_rate is not null)
+{
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="cace-card p-4">
+                <h3 class="h6 fw-bold cace-text-primary mb-3">Valor Actual</h3>
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Nombre</dt>
+                    <dd class="col-sm-7">@(_rate.Name ?? "—")</dd>
+                    <dt class="col-sm-5">Valor</dt>
+                    <dd class="col-sm-7 fw-semibold">@_rate.CurrentValue.ToString("0.0000")%</dd>
+                    <dt class="col-sm-5">Fecha Efectiva</dt>
+                    <dd class="col-sm-7">@_rate.EffectiveDate.ToString("dd/MM/yyyy")</dd>
+                    <dt class="col-sm-5">Fuente</dt>
+                    <dd class="col-sm-7">@(_rate.Source ?? "—")</dd>
+                    <dt class="col-sm-5">Actualizado</dt>
+                    <dd class="col-sm-7">@_rate.UpdatedAt.ToString("dd/MM/yyyy HH:mm")</dd>
+                </dl>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="cace-card p-4">
+                <h3 class="h6 fw-bold cace-text-primary mb-3">Actualizar Tasa</h3>
+                <p class="small text-muted">PUT /api/v1/reference-rates/{id} — recalcula la tasa efectiva de todos los préstamos indexados a esta referencia.</p>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Nuevo Valor (%)</label>
+                    <input type="number" step="0.0001" class="form-control" @bind="_updateRequest.CurrentValue" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Fecha Efectiva</label>
+                    <input type="date" class="form-control" @bind="_effectiveDate" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Fuente (opcional)</label>
+                    <input class="form-control" @bind="_updateRequest.Source" placeholder="Banco Central" />
+                </div>
+                <button class="btn btn-primary w-100 d-flex align-items-center justify-content-center gap-2" @onclick="UpdateAsync" disabled="@_isSaving">
+                    @if (_isSaving) { <span class="spinner-border spinner-border-sm"></span> }
+                    Guardar
+                </button>
+                @if (_saveMessage is not null)
+                {
+                    <div class="alert @(_saveSuccess ? "alert-success" : "alert-danger") small mt-3 mb-0">@_saveMessage</div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string _rateId = "TBP_CRC";
+    private bool _isLoading;
+    private ApiError? _loadError;
+    private ReferenceRateResponse? _rate;
+
+    private UpdateReferenceRateRequest _updateRequest = new();
+    private DateTime _effectiveDate = DateTime.Today;
+    private bool _isSaving;
+    private bool _saveSuccess;
+    private string? _saveMessage;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private Task OnKeyUp(KeyboardEventArgs e) =>
+        e.Key == "Enter" ? LoadAsync() : Task.CompletedTask;
+
+    private async Task LoadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_rateId))
+        {
+            return;
+        }
+
+        _isLoading = true;
+        _loadError = null;
+        _saveMessage = null;
+        StateHasChanged();
+
+        var result = await ReferenceRateService.GetAsync(_rateId.Trim());
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _rate = result.Data;
+            if (_rate is not null)
+            {
+                _updateRequest.CurrentValue = _rate.CurrentValue;
+                _updateRequest.Source = _rate.Source;
+                _effectiveDate = _rate.EffectiveDate;
+            }
+        }
+        else
+        {
+            _loadError = result.Error;
+        }
+    }
+
+    private async Task UpdateAsync()
+    {
+        _isSaving = true;
+        _saveMessage = null;
+
+        _updateRequest.EffectiveDate = _effectiveDate;
+
+        var result = await ReferenceRateService.UpdateAsync(_rateId.Trim(), _updateRequest);
+        _isSaving = false;
+
+        if (result.IsSuccess)
+        {
+            _saveSuccess = true;
+            _saveMessage = "Tasa actualizada. Los préstamos indexados recalcularán su tasa efectiva.";
+            _rate = result.Data ?? _rate;
+        }
+        else
+        {
+            _saveSuccess = false;
+            _saveMessage = result.Error?.Message ?? "No fue posible actualizar la tasa.";
+        }
+    }
+}

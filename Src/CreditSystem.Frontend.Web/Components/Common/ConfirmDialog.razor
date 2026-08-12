@@ -1,0 +1,48 @@
+@* Modal de confirmacion reutilizable para acciones destructivas o
+   irreversibles (marcar default, congelar linea, liquidar credito, etc.).
+   Se controla 100% desde el padre via los parametros IsVisible/OnConfirm/
+   OnCancel para no depender de JS interop. *@
+
+@if (IsVisible)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.4);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold cace-text-primary">@Title</h5>
+                    <button type="button" class="btn-close" @onclick="Cancel" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">@Message</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="Cancel" disabled="@IsBusy">@CancelText</button>
+                    <button class="btn @ConfirmButtonClass" @onclick="Confirm" disabled="@IsBusy">
+                        @if (IsBusy)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        @ConfirmText
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string Title { get; set; } = "Confirmar acción";
+    [Parameter] public string Message { get; set; } = "¿Está seguro de continuar?";
+    [Parameter] public string ConfirmText { get; set; } = "Confirmar";
+    [Parameter] public string CancelText { get; set; } = "Cancelar";
+    [Parameter] public bool IsDestructive { get; set; } = true;
+    [Parameter] public bool IsBusy { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string ConfirmButtonClass => IsDestructive ? "btn-danger" : "btn-primary";
+
+    private Task Confirm() => OnConfirm.InvokeAsync();
+    private Task Cancel() => OnCancel.InvokeAsync();
+}

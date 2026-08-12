@@ -1,0 +1,55 @@
+@* Tabla generica reutilizable: encapsula los 4 estados obligatorios
+   (Loading/Success/Empty/Error) para no repetir ese condicional en cada
+   pantalla con listados (Creditos, Morosos, Revolventes, etc.). *@
+@typeparam TItem
+
+<div class="cace-card">
+    @if (IsLoading)
+    {
+        <LoadingIndicator Message="@LoadingMessage" />
+    }
+    else if (Error is not null)
+    {
+        <ErrorState Error="Error" OnRetry="OnRetry" />
+    }
+    else if (Items is null || Items.Count == 0)
+    {
+        <EmptyState Icon="@EmptyIcon" Title="@EmptyTitle" Description="@EmptyDescription" />
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table cace-table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        @HeaderTemplate
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Items)
+                    {
+                        <tr>
+                            @RowTemplate(item)
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public ApiError? Error { get; set; }
+    [Parameter] public IReadOnlyList<TItem>? Items { get; set; }
+
+    [Parameter] public string LoadingMessage { get; set; } = "Cargando información...";
+    [Parameter] public string EmptyIcon { get; set; } = "inbox";
+    [Parameter] public string EmptyTitle { get; set; } = "Sin resultados";
+    [Parameter] public string? EmptyDescription { get; set; }
+
+    [Parameter] public RenderFragment? HeaderTemplate { get; set; }
+    [Parameter] public RenderFragment<TItem>? RowTemplate { get; set; }
+
+    [Parameter] public EventCallback OnRetry { get; set; }
+}

@@ -1,0 +1,137 @@
+@page "/"
+@inject ILoanService LoanService
+@inject IDelinquentLoanService DelinquentLoanService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Inicio | CACE</PageTitle>
+
+<PageHeader Title="Resumen General" Icon="dashboard"
+            Subtitle="Indicadores construidos con los endpoints reales del swagger (open_api.json)." />
+
+<div class="alert alert-warning d-flex gap-2 align-items-start mb-4" role="alert">
+    <span class="material-symbols-outlined">info</span>
+    <div class="small">
+        <strong>Documentación insuficiente:</strong> el swagger no expone un
+        endpoint de KPIs agregados de cartera (socios activos, cartera total,
+        disponibilidad de caja). Las tarjetas de abajo solo usan datos de
+        endpoints reales (<code>/api/v1/loans/defaulted</code>,
+        <code>/api/v1/loans/paid-off</code>, <code>/api/v1/delinquent-loans</code>).
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-6 col-xl-3">
+        <KpiCard Label="Préstamos en Mora" Value="@(_isLoading ? "…" : _delinquentCount?.ToString() ?? "—")"
+                 Accent="warning" FootnoteIcon="warning" FootnoteText="/api/v1/delinquent-loans" />
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <KpiCard Label="Préstamos en Default" Value="@(_isLoading ? "…" : _defaultedCount?.ToString() ?? "—")"
+                 Accent="danger" FootnoteIcon="report" FootnoteText="/api/v1/loans/defaulted" />
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <KpiCard Label="Préstamos Liquidados" Value="@(_isLoading ? "…" : _paidOffCount?.ToString() ?? "—")"
+                 Accent="success" FootnoteIcon="check_circle" FootnoteText="/api/v1/loans/paid-off" />
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="cace-card cace-kpi-card p-4 h-100 d-flex flex-column justify-content-between opacity-75">
+            <div>
+                <p class="cace-kpi-label mb-1">Cartera Total / Socios Activos</p>
+                <h3 class="cace-kpi-value mb-0 text-muted">—</h3>
+            </div>
+            <div class="d-flex align-items-center gap-1 mt-3 small text-muted">
+                <span class="material-symbols-outlined" style="font-size:18px;">block</span>
+                <span>Pendiente de endpoint de KPIs</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="cace-card p-4 mb-2">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="h6 fw-bold cace-text-primary mb-0">Préstamos en Mora (más recientes)</h3>
+        <a class="small fw-semibold text-decoration-none" href="/morosos">
+            Ver todo <span class="material-symbols-outlined" style="font-size:16px;">chevron_right</span>
+        </a>
+    </div>
+
+    <DataTable TItem="DelinquentLoanResponse"
+               IsLoading="_isLoading"
+               Error="_delinquentError"
+               Items="_topDelinquent"
+               EmptyIcon="check_circle"
+               EmptyTitle="Sin préstamos morosos"
+               EmptyDescription="No hay préstamos con atraso registrados actualmente."
+               OnRetry="LoadAsync">
+        <HeaderTemplate>
+            <th>Préstamo</th>
+            <th>Socio</th>
+            <th class="text-end">Saldo</th>
+            <th class="text-center">Días Atraso</th>
+            <th>Estado de Cobro</th>
+            <th></th>
+        </HeaderTemplate>
+        <RowTemplate Context="loan">
+            <td class="cace-table-mono">@loan.LoanId.ToString()[..8]</td>
+            <td>@(loan.CustomerName ?? loan.CustomerId.ToString()[..8])</td>
+            <td class="text-end cace-table-mono">@CurrencyFormatter.Format(loan.CurrentBalance)</td>
+            <td class="text-center">@loan.DaysOverdue</td>
+            <td>
+                @if (!string.IsNullOrWhiteSpace(loan.CollectionStatus))
+                {
+                    <span class="cace-badge cace-badge-warning">@loan.CollectionStatus</span>
+                }
+                else
+                {
+                    <span class="text-muted small">—</span>
+                }
+            </td>
+            <td class="text-end">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => VerDetalle(loan.LoanId)">
+                    <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+                </button>
+            </td>
+        </RowTemplate>
+    </DataTable>
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private int? _delinquentCount;
+    private int? _defaultedCount;
+    private int? _paidOffCount;
+    private List<DelinquentLoanResponse>? _topDelinquent;
+    private ApiError? _delinquentError;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _delinquentError = null;
+        StateHasChanged();
+
+        var delinquentTask = DelinquentLoanService.GetAsync();
+        var defaultedTask = LoanService.GetDefaultedAsync();
+        var paidOffTask = LoanService.GetPaidOffAsync();
+
+        await Task.WhenAll(delinquentTask, defaultedTask, paidOffTask);
+
+        var delinquentResult = delinquentTask.Result;
+        if (delinquentResult.IsSuccess)
+        {
+            _delinquentCount = delinquentResult.Data?.Count ?? 0;
+            _topDelinquent = delinquentResult.Data?.OrderByDescending(x => x.DaysOverdue).Take(5).ToList();
+        }
+        else
+        {
+            _delinquentError = delinquentResult.Error;
+        }
+
+        _defaultedCount = defaultedTask.Result.IsSuccess ? defaultedTask.Result.Data?.Count ?? 0 : null;
+        _paidOffCount = paidOffTask.Result.IsSuccess ? paidOffTask.Result.Data?.Count ?? 0 : null;
+
+        _isLoading = false;
+    }
+
+    private void VerDetalle(Guid loanId) => NavigationManager.NavigateTo($"/creditos/{loanId}");
+}

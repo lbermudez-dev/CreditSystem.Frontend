@@ -1,0 +1,82 @@
+@* Replica la NavigationDrawer de los HTML de referencia. Enlaces
+   funcionales para todo lo cubierto por el swagger real (open_api.json):
+   Inicio, Socios, Créditos, Revolventes, Morosos, Productos, Riesgo,
+   Pagos Asíncronos y el grupo técnico (Tasas, Webhooks, Administración).
+   El resto (Ahorros, Caja, Tesorería, Contabilidad, Cumplimiento,
+   Reportes, Seguridad) se deja visible por fidelidad visual pero
+   deshabilitado: no hay endpoints para esos módulos en el swagger
+   (regla: no inventar funcionalidad). *@
+
+<aside class="cace-sidebar d-none d-lg-flex flex-column">
+    <nav class="nav flex-column">
+        <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">
+            <span class="material-symbols-outlined">dashboard</span>
+            <span>Inicio</span>
+        </NavLink>
+
+        <NavLink class="nav-link" href="/socios">
+            <span class="material-symbols-outlined">groups</span>
+            <span>Socios</span>
+        </NavLink>
+
+        <NavLink class="nav-link" href="/creditos">
+            <span class="material-symbols-outlined">account_balance_wallet</span>
+            <span>Créditos</span>
+        </NavLink>
+
+        <NavLink class="nav-link" href="/revolventes">
+            <span class="material-symbols-outlined">credit_card</span>
+            <span>Líneas Revolventes</span>
+        </NavLink>
+
+        <NavLink class="nav-link" href="/morosos">
+            <span class="material-symbols-outlined">warning</span>
+            <span>Cartera Morosa</span>
+        </NavLink>
+
+        <NavLink class="nav-link" href="/riesgo">
+            <span class="material-symbols-outlined">analytics</span>
+            <span>Clasificación de Riesgo</span>
+        </NavLink>
+
+        <NavLink class="nav-link" href="/productos">
+            <span class="material-symbols-outlined">inventory_2</span>
+            <span>Productos de Crédito</span>
+        </NavLink>
+
+        <NavLink class="nav-link" href="/pagos">
+            <span class="material-symbols-outlined">sync_alt</span>
+            <span>Pagos Asíncronos</span>
+        </NavLink>
+
+        <div class="border-top my-2 mx-2 opacity-50"></div>
+
+        <span class="nav-link disabled opacity-50" style="cursor: not-allowed;" title="Sin endpoint documentado en el swagger">
+            <span class="material-symbols-outlined">savings</span>
+            <span>Ahorros</span>
+        </span>
+        <span class="nav-link disabled opacity-50" style="cursor: not-allowed;" title="Sin endpoint documentado en el swagger">
+            <span class="material-symbols-outlined">point_of_sale</span>
+            <span>Caja</span>
+        </span>
+        <span class="nav-link disabled opacity-50" style="cursor: not-allowed;" title="Sin endpoint documentado en el swagger">
+            <span class="material-symbols-outlined">assessment</span>
+            <span>Reportes</span>
+        </span>
+
+        <div class="border-top my-2 mx-2 opacity-50"></div>
+
+        <NavLink class="nav-link" href="/tasas">
+            <span class="material-symbols-outlined">percent</span>
+            <span>Tasas de Referencia</span>
+        </NavLink>
+        <NavLink class="nav-link" href="/webhooks">
+            <span class="material-symbols-outlined">webhook</span>
+            <span>Webhooks</span>
+        </NavLink>
+        <NavLink class="nav-link" href="/admin">
+            <span class="material-symbols-outlined">settings_suggest</span>
+            <span>Administración</span>
+        </NavLink>
+    </nav>
+</aside>

@@ -1,0 +1,228 @@
+@page "/productos"
+@inject IProductService ProductService
+
+<PageTitle>Productos de Crédito | CACE</PageTitle>
+
+<PageHeader Title="Productos de Crédito" Icon="inventory_2"
+            Subtitle="GET /api/v1/products">
+    <Actions>
+        <button class="btn btn-primary d-flex align-items-center gap-2" @onclick="() => _showCreate = true">
+            <span class="material-symbols-outlined" style="font-size:18px;">add</span>
+            Nuevo Producto
+        </button>
+    </Actions>
+</PageHeader>
+
+<DataTable TItem="ProductResponse"
+           IsLoading="_isLoading"
+           Error="_error"
+           Items="_products"
+           EmptyIcon="inventory_2"
+           EmptyTitle="Sin productos registrados"
+           OnRetry="LoadAsync">
+    <HeaderTemplate>
+        <th>Nombre</th>
+        <th class="text-end">Monto Mín.</th>
+        <th class="text-end">Monto Máx.</th>
+        <th class="text-center">Plazo (meses)</th>
+        <th class="text-end">Tasa Base</th>
+        <th>Requiere Garantía</th>
+        <th>Estado</th>
+        <th></th>
+    </HeaderTemplate>
+    <RowTemplate Context="p">
+        <td class="fw-semibold">@(p.Name ?? "—")</td>
+        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(p.MinAmount)</td>
+        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(p.MaxAmount)</td>
+        <td class="text-center">@p.MinTermMonths–@p.MaxTermMonths</td>
+        <td class="text-end cace-table-mono">@(p.BaseInterestRate?.ToString("0.00") ?? "—")%</td>
+        <td>@(p.RequiresCollateral ? "Sí" : "No")</td>
+        <td>
+            @if (string.Equals(p.Status, "Active", StringComparison.OrdinalIgnoreCase) || p.Status == "0")
+            {
+                <span class="cace-badge cace-badge-success">@(p.Status ?? "—")</span>
+            }
+            else
+            {
+                <span class="cace-badge cace-badge-neutral">@(p.Status ?? "—")</span>
+            }
+        </td>
+        <td class="text-end">
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleStatus(p)" disabled="@_isToggling">
+                Cambiar Estado
+            </button>
+        </td>
+    </RowTemplate>
+</DataTable>
+
+@if (_toggleError is not null)
+{
+    <div class="alert alert-danger small mt-3">@_toggleError.Message</div>
+}
+
+@if (_showCreate)
+{
+    <div class="modal d-block" style="background-color: rgba(0,0,0,0.4);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold cace-text-primary">Nuevo Producto de Crédito</h5>
+                    <button class="btn-close" @onclick="() => _showCreate = false"></button>
+                </div>
+                <EditForm Model="_createRequest" OnValidSubmit="CreateAsync">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold text-uppercase text-muted">Nombre</label>
+                            <InputText class="form-control" @bind-Value="_createRequest.Name" />
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Monto Mínimo</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.MinAmount" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Monto Máximo</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.MaxAmount" />
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Plazo Mínimo (meses)</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.MinTermMonths" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Plazo Máximo (meses)</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.MaxTermMonths" />
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Tasa Base (%, opcional)</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.BaseInterestRate" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">LTV Máximo (opcional)</label>
+                                <InputNumber class="form-control" @bind-Value="_createRequest.MaxLtv" />
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold text-uppercase text-muted">Método de Amortización por Defecto</label>
+                                <InputSelect class="form-select" @bind-Value="_createRequest.DefaultAmortizationMethod">
+                                    <option value="@AmortizationMethod.French">French (0)</option>
+                                    <option value="@AmortizationMethod.German">German (1)</option>
+                                    <option value="@AmortizationMethod.Flat">Flat (2)</option>
+                                    <option value="@AmortizationMethod.American">American (3)</option>
+                                    <option value="@AmortizationMethod.InterestOnly">InterestOnly (4)</option>
+                                </InputSelect>
+                            </div>
+                            <div class="col-6 d-flex align-items-end">
+                                <div class="form-check form-switch mb-2">
+                                    <InputCheckbox class="form-check-input" id="requiresCollateral" @bind-Value="_createRequest.RequiresCollateral" />
+                                    <label class="form-check-label small" for="requiresCollateral">Requiere garantía</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (_createError is not null)
+                        {
+                            <div class="alert alert-danger small mt-3 mb-0">@_createError.Message</div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => _showCreate = false" disabled="@_isCreating">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@_isCreating">
+                            @if (_isCreating) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Crear Producto
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _isLoading = true;
+    private ApiError? _error;
+    private List<ProductResponse>? _products;
+
+    private bool _showCreate;
+    private bool _isCreating;
+    private ApiError? _createError;
+    private CreateProductRequest _createRequest = new()
+    {
+        MinTermMonths = 1,
+        MaxTermMonths = 24
+    };
+
+    private bool _isToggling;
+    private ApiError? _toggleError;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        var result = await ProductService.GetAllAsync();
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _products = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        _isCreating = true;
+        _createError = null;
+
+        var result = await ProductService.CreateAsync(_createRequest);
+
+        _isCreating = false;
+
+        if (result.IsSuccess)
+        {
+            _showCreate = false;
+            await LoadAsync();
+        }
+        else
+        {
+            _createError = result.Error;
+        }
+    }
+
+    private async Task ToggleStatus(ProductResponse product)
+    {
+        _isToggling = true;
+        _toggleError = null;
+
+        // DOCUMENTACION INSUFICIENTE: ProductResponse.Status es "string" (no
+        // el enum ProductStatus), y el swagger no documenta los literales
+        // exactos ("Active"/"Inactive" vs "0"/"1"). Se alterna en base al
+        // guess de ProductStatus (Active=0/Inactive=1) — confirmar contra
+        // el backend real.
+        var isCurrentlyActive = string.Equals(product.Status, "Active", StringComparison.OrdinalIgnoreCase) || product.Status == "0";
+        var newStatus = isCurrentlyActive ? ProductStatus.Inactive : ProductStatus.Active;
+
+        var result = await ProductService.UpdateStatusAsync(product.Id, new UpdateProductStatusRequest { Status = newStatus });
+
+        _isToggling = false;
+
+        if (result.IsSuccess)
+        {
+            await LoadAsync();
+        }
+        else
+        {
+            _toggleError = result.Error;
+        }
+    }
+}

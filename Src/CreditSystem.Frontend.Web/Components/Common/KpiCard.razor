@@ -1,0 +1,40 @@
+<div class="cace-card cace-kpi-card p-4 h-100 cace-accent-@AccentClass d-flex flex-column justify-content-between">
+    <div>
+        <p class="cace-kpi-label mb-1">@Label</p>
+        <h3 class="cace-kpi-value mb-0">@Value</h3>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(FootnoteText))
+    {
+        <div class="d-flex align-items-center gap-1 mt-3 small @FootnoteClass">
+            @if (!string.IsNullOrWhiteSpace(FootnoteIcon))
+            {
+                <span class="material-symbols-outlined" style="font-size:18px;">@FootnoteIcon</span>
+            }
+            <span>@FootnoteText</span>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Etiqueta corta en mayúsculas (ej. "Cartera Total").</summary>
+    [Parameter] public string Label { get; set; } = string.Empty;
+
+    /// <summary>Valor principal ya formateado (ej. "C$ 254.2M").</summary>
+    [Parameter] public string Value { get; set; } = string.Empty;
+
+    [Parameter] public string? FootnoteText { get; set; }
+    [Parameter] public string? FootnoteIcon { get; set; }
+
+    /// <summary>secondary | success | warning | danger</summary>
+    [Parameter] public string Accent { get; set; } = "secondary";
+
+    private string AccentClass => Accent;
+
+    private string FootnoteClass => Accent switch
+    {
+        "warning" => "text-warning fw-semibold",
+        "danger" => "text-danger fw-semibold",
+        "success" => "text-success",
+        _ => "text-muted"
+    };
+}
