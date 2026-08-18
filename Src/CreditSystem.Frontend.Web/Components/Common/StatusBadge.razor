@@ -24,6 +24,7 @@
         "Pending" => "Pendiente",
         "Frozen" => "Congelada",
         "Closed" => "Cerrada",
+        "Disbursing" => "Desembolsando",
         _ => Status
     };
 
@@ -31,7 +32,7 @@
     {
         "Active" => "cace-badge-success",
         "Approved" or "Pending" => "cace-badge-info",
-        "Delinquent" or "Frozen" => "cace-badge-warning",
+        "Delinquent" or "Frozen" or "Disbursing" => "cace-badge-warning",
         "Default" => "cace-badge-danger",
         "PaidOff" or "Closed" => "cace-badge-neutral",
         "Restructured" => "cace-badge-info",

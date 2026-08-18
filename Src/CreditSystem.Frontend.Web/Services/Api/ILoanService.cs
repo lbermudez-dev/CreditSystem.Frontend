@@ -47,4 +47,22 @@ public interface ILoanService
 
     /// <summary>GET /api/v1/loans/paid-off?fromDate=&amp;toDate=&amp;earlyPayoffOnly=</summary>
     Task<ApiResult<List<PaidOffLoanResponse>>> GetPaidOffAsync(DateTime? fromDate = null, DateTime? toDate = null, bool? earlyPayoffOnly = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// GET /api/v1/loans/pending-disbursement — endpoint agregado al backend
+    /// despues del ultimo open_api.json sincronizado (54 rutas).
+    /// </summary>
+    Task<ApiResult<List<PendingDisbursementResponse>>> GetPendingDisbursementsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// POST /api/v1/loans/{id}/confirm-disbursement — endpoint agregado al
+    /// backend despues del ultimo open_api.json sincronizado (54 rutas).
+    /// </summary>
+    Task<ApiResult<ConfirmDisbursementResponse>> ConfirmDisbursementAsync(Guid loanId, ConfirmDisbursementRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// POST /api/v1/loans/{id}/fail-disbursement — endpoint agregado al
+    /// backend despues del ultimo open_api.json sincronizado (54 rutas).
+    /// </summary>
+    Task<ApiResult<FailDisbursementResponse>> FailDisbursementAsync(Guid loanId, FailDisbursementRequest request, CancellationToken ct = default);
 }

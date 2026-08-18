@@ -1,10 +1,15 @@
 @* Replica la NavigationDrawer de los HTML de referencia. Enlaces
-   funcionales para todo lo cubierto por el swagger real (open_api.json):
-   Inicio, Socios, Créditos, Revolventes, Morosos, Productos, Riesgo,
-   Pagos Asíncronos y el grupo técnico (Tasas, Webhooks, Administración).
+   funcionales para todo lo cubierto por el backend real: Inicio, Socios,
+   Créditos, Desembolsos, Revolventes, Morosos, Productos, Riesgo, Pagos
+   Asíncronos y el grupo técnico (Tasas, Políticas de Originación,
+   Webhooks, Administración, Proyecciones). Los últimos 4 enlaces
+   (Desembolsos, Políticas, Proyecciones) corresponden a endpoints que el
+   backend agregó después del open_api.json sincronizado (54 rutas) — ver
+   la sección "Endpoints del backend sin pantalla todavía" en
+   frontend-overview.md antes de este cambio.
    El resto (Ahorros, Caja, Tesorería, Contabilidad, Cumplimiento,
    Reportes, Seguridad) se deja visible por fidelidad visual pero
-   deshabilitado: no hay endpoints para esos módulos en el swagger
+   deshabilitado: no hay endpoints para esos módulos en el backend
    (regla: no inventar funcionalidad). *@
 
 <aside class="cace-sidebar d-none d-lg-flex flex-column">
@@ -22,6 +27,11 @@
         <NavLink class="nav-link" href="/creditos">
             <span class="material-symbols-outlined">account_balance_wallet</span>
             <span>Créditos</span>
+        </NavLink>
+
+        <NavLink class="nav-link" href="/desembolsos">
+            <span class="material-symbols-outlined">payments</span>
+            <span>Desembolsos</span>
         </NavLink>
 
         <NavLink class="nav-link" href="/revolventes">
@@ -70,6 +80,10 @@
             <span class="material-symbols-outlined">percent</span>
             <span>Tasas de Referencia</span>
         </NavLink>
+        <NavLink class="nav-link" href="/politicas">
+            <span class="material-symbols-outlined">rule</span>
+            <span>Políticas de Originación</span>
+        </NavLink>
         <NavLink class="nav-link" href="/webhooks">
             <span class="material-symbols-outlined">webhook</span>
             <span>Webhooks</span>
@@ -77,6 +91,10 @@
         <NavLink class="nav-link" href="/admin">
             <span class="material-symbols-outlined">settings_suggest</span>
             <span>Administración</span>
+        </NavLink>
+        <NavLink class="nav-link" href="/admin/proyecciones">
+            <span class="material-symbols-outlined">sync_problem</span>
+            <span>Proyecciones</span>
         </NavLink>
     </nav>
 </aside>

@@ -70,6 +70,8 @@ builder.Services.AddScoped<IRiskService, RiskService>();
 builder.Services.AddScoped<IWebhookService, WebhookService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IUnderwritingPolicyService, UnderwritingPolicyService>();
+builder.Services.AddScoped<IProjectionAdminService, ProjectionAdminService>();
 
 var app = builder.Build();
 

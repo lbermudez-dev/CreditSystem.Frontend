@@ -1,0 +1,246 @@
+@page "/desembolsos"
+@inject ILoanService LoanService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Desembolsos Pendientes | CACE</PageTitle>
+
+<PageHeader Title="Cola de Desembolsos" Icon="payments" Breadcrumb="Créditos / Desembolsos"
+            Subtitle="GET /api/v1/loans/pending-disbursement — endpoint agregado al backend despues del ultimo open_api.json sincronizado. Préstamos aprobados en espera de ser desembolsados o de confirmación bancaria." />
+
+@if (_items is not null)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <KpiCard Label="Total en Cola" Value="@_items.Count.ToString()" Accent="secondary" />
+        </div>
+        <div class="col-md-4">
+            <KpiCard Label="Aprobados (sin instruir)" Value="@_items.Count(i => i.Status == "Approved").ToString()" Accent="secondary" />
+        </div>
+        <div class="col-md-4">
+            <KpiCard Label="Desembolsando (esperando confirmación)" Value="@_items.Count(i => i.Status == "Disbursing").ToString()" Accent="warning" />
+        </div>
+    </div>
+}
+
+<DataTable TItem="PendingDisbursementResponse"
+           IsLoading="_isLoading"
+           Error="_error"
+           Items="_items"
+           EmptyIcon="check_circle"
+           EmptyTitle="Sin desembolsos pendientes"
+           OnRetry="LoadAsync">
+    <HeaderTemplate>
+        <th>Préstamo</th>
+        <th>Socio</th>
+        <th class="text-end">Monto</th>
+        <th>Método / Cuenta</th>
+        <th>Aprobado</th>
+        <th>Instruido</th>
+        <th>Estado</th>
+        <th></th>
+    </HeaderTemplate>
+    <RowTemplate Context="item">
+        <td class="cace-table-mono">@item.LoanId.ToString()[..8]</td>
+        <td>@(item.CustomerName ?? item.CustomerId.ToString()[..8])</td>
+        <td class="text-end cace-table-mono">@CurrencyFormatter.Format(item.Principal, item.Currency)</td>
+        <td class="small text-muted">
+            @(item.DisbursementMethod ?? "—")
+            @if (!string.IsNullOrWhiteSpace(item.DestinationAccount))
+            {
+                <br />
+                @item.DestinationAccount
+            }
+        </td>
+        <td>@item.ApprovedAt.ToString("dd/MM/yyyy")</td>
+        <td>@(item.DisbursementInstructedAt?.ToString("dd/MM/yyyy") ?? "—")</td>
+        <td><StatusBadge Status="@(item.Status ?? "")" /></td>
+        <td class="text-end">
+            <div class="d-flex gap-1 justify-content-end">
+                <button class="btn btn-sm btn-outline-secondary" title="Ver préstamo" @onclick="() => VerDetalle(item.LoanId)">
+                    <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+                </button>
+                @if (string.Equals(item.Status, "Disbursing", StringComparison.OrdinalIgnoreCase))
+                {
+                    <button class="btn btn-sm btn-outline-primary" title="Confirmar desembolso" @onclick="() => StartConfirm(item)">
+                        <span class="material-symbols-outlined" style="font-size:16px;">check_circle</span>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" title="Marcar desembolso fallido" @onclick="() => StartFail(item)">
+                        <span class="material-symbols-outlined" style="font-size:16px;">error</span>
+                    </button>
+                }
+            </div>
+        </td>
+    </RowTemplate>
+</DataTable>
+
+@if (_confirmTarget is not null)
+{
+    <div class="modal d-block" style="background-color: rgba(0,0,0,0.4);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold cace-text-primary">Confirmar Desembolso</h5>
+                    <button class="btn-close" @onclick="() => _confirmTarget = null" disabled="@_isBusy"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">
+                        POST /api/v1/loans/{id}/confirm-disbursement — confirma que la transferencia bancaria
+                        del préstamo @_confirmTarget.LoanId.ToString()[..8] se completó exitosamente.
+                    </p>
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Confirmado Por</label>
+                    <input class="form-control" @bind="_confirmedBy" placeholder="Nombre del responsable" />
+                    @if (_actionError is not null)
+                    {
+                        <div class="alert alert-danger small mt-3 mb-0">@_actionError.Message</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => _confirmTarget = null" disabled="@_isBusy">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="ConfirmAsync" disabled="@(_isBusy || string.IsNullOrWhiteSpace(_confirmedBy))">
+                        @if (_isBusy) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Confirmar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_failTarget is not null)
+{
+    <div class="modal d-block" style="background-color: rgba(0,0,0,0.4);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold cace-text-primary">Marcar Desembolso Fallido</h5>
+                    <button class="btn-close" @onclick="() => _failTarget = null" disabled="@_isBusy"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">
+                        POST /api/v1/loans/{id}/fail-disbursement — registra el fallo y devuelve el préstamo
+                        @_failTarget.LoanId.ToString()[..8] a estado "Aprobado" para reintentar el desembolso.
+                    </p>
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Motivo del Fallo</label>
+                    <input class="form-control" @bind="_failReason" placeholder="Ej. cuenta destino rechazada" />
+                    @if (_actionError is not null)
+                    {
+                        <div class="alert alert-danger small mt-3 mb-0">@_actionError.Message</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => _failTarget = null" disabled="@_isBusy">Cancelar</button>
+                    <button type="button" class="btn btn-danger" @onclick="FailAsync" disabled="@(_isBusy || string.IsNullOrWhiteSpace(_failReason))">
+                        @if (_isBusy) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Registrar Fallo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _isLoading = true;
+    private ApiError? _error;
+    private List<PendingDisbursementResponse>? _items;
+
+    private PendingDisbursementResponse? _confirmTarget;
+    private string _confirmedBy = string.Empty;
+
+    private PendingDisbursementResponse? _failTarget;
+    private string _failReason = string.Empty;
+
+    private bool _isBusy;
+    private ApiError? _actionError;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        StateHasChanged();
+
+        var result = await LoanService.GetPendingDisbursementsAsync();
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _items = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+
+    private void VerDetalle(Guid loanId) => NavigationManager.NavigateTo($"/creditos/{loanId}");
+
+    private void StartConfirm(PendingDisbursementResponse item)
+    {
+        _actionError = null;
+        _confirmedBy = string.Empty;
+        _confirmTarget = item;
+    }
+
+    private void StartFail(PendingDisbursementResponse item)
+    {
+        _actionError = null;
+        _failReason = string.Empty;
+        _failTarget = item;
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (_confirmTarget is null || string.IsNullOrWhiteSpace(_confirmedBy))
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _actionError = null;
+
+        var result = await LoanService.ConfirmDisbursementAsync(
+            _confirmTarget.LoanId,
+            new ConfirmDisbursementRequest { ConfirmedBy = _confirmedBy });
+
+        _isBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _confirmTarget = null;
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task FailAsync()
+    {
+        if (_failTarget is null || string.IsNullOrWhiteSpace(_failReason))
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _actionError = null;
+
+        var result = await LoanService.FailDisbursementAsync(
+            _failTarget.LoanId,
+            new FailDisbursementRequest { Reason = _failReason });
+
+        _isBusy = false;
+
+        if (result.IsSuccess)
+        {
+            _failTarget = null;
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+}

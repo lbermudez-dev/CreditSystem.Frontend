@@ -1,0 +1,197 @@
+@page "/admin/proyecciones"
+@inject IProjectionAdminService ProjectionAdminService
+
+<PageTitle>Administración de Proyecciones | CACE</PageTitle>
+
+<PageHeader Title="Administración de Proyecciones" Icon="sync_problem"
+            Breadcrumb="Administración / Proyecciones"
+            Subtitle="Grupo 'ProjectionAdmin' (base /api/v1/admin/projection) — endpoint agregado al backend despues del ultimo open_api.json sincronizado. Opera sobre el worker de proyecciones del event store; perfil técnico/soporte." />
+
+<div class="alert alert-warning d-flex gap-2 align-items-start mb-4" role="alert">
+    <span class="material-symbols-outlined">warning</span>
+    <div class="small">
+        El event store es la fuente de verdad — los read models de abajo son derivados eventualmente
+        consistentes. Reconstruir no pierde información de negocio, pero sí interrumpe temporalmente
+        la consistencia de las pantallas que leen de estos read models mientras el worker reprocesa
+        todos los eventos desde cero.
+    </div>
+</div>
+
+<div class="cace-card p-3 mb-4">
+    <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="showResolved" @bind="_showResolved" @bind:after="LoadAsync" />
+        <label class="form-check-label small fw-semibold" for="showResolved">Mostrar también las fallas resueltas</label>
+    </div>
+</div>
+
+@if (_failures is not null)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <KpiCard Label="Fallas Listadas" Value="@_failures.Count.ToString()" Accent="secondary" />
+        </div>
+        <div class="col-md-4">
+            <KpiCard Label="Sin Resolver" Value="@_failures.Count(f => !f.Resolved).ToString()"
+                     Accent="@(_failures.Any(f => !f.Resolved) ? "danger" : "success")" />
+        </div>
+        <div class="col-md-4">
+            <KpiCard Label="Proyectores Afectados" Value="@_failures.Select(f => f.ProjectorName).Distinct().Count().ToString()" Accent="secondary" />
+        </div>
+    </div>
+}
+
+<DataTable TItem="ProjectionFailureResponse"
+           IsLoading="_isLoading"
+           Error="_error"
+           Items="_failures"
+           EmptyIcon="check_circle"
+           EmptyTitle="Sin fallas de proyección"
+           OnRetry="LoadAsync">
+    <HeaderTemplate>
+        <th>Evento</th>
+        <th>Proyector</th>
+        <th>Error</th>
+        <th>Ocurrió</th>
+        <th class="text-center">Intentos</th>
+        <th>Estado</th>
+        <th></th>
+    </HeaderTemplate>
+    <RowTemplate Context="f">
+        <td class="cace-table-mono">@f.EventType<br /><span class="text-muted small">@f.EventId.ToString()[..8]</span></td>
+        <td>@f.ProjectorName</td>
+        <td class="small text-muted" style="max-width:320px;">@f.ErrorMessage</td>
+        <td>@f.OccurredAt.ToString("dd/MM/yyyy HH:mm")</td>
+        <td class="text-center">@f.Attempts</td>
+        <td>
+            @if (f.Resolved)
+            {
+                <span class="cace-badge cace-badge-success">Resuelta</span>
+            }
+            else
+            {
+                <span class="cace-badge cace-badge-danger">Pendiente</span>
+            }
+        </td>
+        <td class="text-end">
+            @if (!f.Resolved)
+            {
+                <button class="btn btn-sm btn-outline-secondary" title="Marcar como resuelta"
+                        @onclick="() => ResolveAsync(f)" disabled="@(_resolvingId == f.Id)">
+                    @if (_resolvingId == f.Id)
+                    {
+                        <span class="spinner-border spinner-border-sm"></span>
+                    }
+                    else
+                    {
+                        <span class="material-symbols-outlined" style="font-size:16px;">done</span>
+                    }
+                </button>
+            }
+        </td>
+    </RowTemplate>
+</DataTable>
+
+@if (_actionError is not null)
+{
+    <div class="alert alert-danger small mt-3">@_actionError.Message</div>
+}
+
+<div class="cace-card p-4 mt-4 border border-danger">
+    <h3 class="h6 fw-bold text-danger mb-2">Zona de Riesgo</h3>
+    <p class="small text-muted">
+        POST /api/v1/admin/projection/rebuild — trunca <strong>todos</strong> los read models y reinicia
+        los checkpoints a 0. El worker los reconstruye desde el principio reproduciendo todo el event
+        store. Úsese solo para soporte/depuración.
+    </p>
+    <button class="btn btn-outline-danger d-flex align-items-center gap-2" @onclick="() => _confirmingRebuild = true" disabled="@_isRebuilding">
+        <span class="material-symbols-outlined" style="font-size:18px;">restart_alt</span>
+        Reconstruir Todas las Proyecciones
+    </button>
+    @if (_rebuildMessage is not null)
+    {
+        <div class="alert alert-info small mt-3 mb-0">@_rebuildMessage</div>
+    }
+</div>
+
+<ConfirmDialog IsVisible="_confirmingRebuild"
+               Title="Reconstruir todas las proyecciones"
+               Message="Esto truncará todos los read models y reiniciará los checkpoints a 0. El event store no se ve afectado, pero las pantallas mostrarán datos incompletos hasta que el worker termine de reprocesar. ¿Continuar?"
+               ConfirmText="Reconstruir"
+               IsBusy="_isRebuilding"
+               OnConfirm="RebuildAsync"
+               OnCancel="() => _confirmingRebuild = false" />
+
+@code {
+    private bool _isLoading = true;
+    private ApiError? _error;
+    private List<ProjectionFailureResponse>? _failures;
+    private bool _showResolved;
+
+    private Guid? _resolvingId;
+    private ApiError? _actionError;
+
+    private bool _confirmingRebuild;
+    private bool _isRebuilding;
+    private string? _rebuildMessage;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        StateHasChanged();
+
+        var result = await ProjectionAdminService.GetFailuresAsync(_showResolved);
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _failures = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+
+    private async Task ResolveAsync(ProjectionFailureResponse failure)
+    {
+        _resolvingId = failure.Id;
+        _actionError = null;
+        StateHasChanged();
+
+        var result = await ProjectionAdminService.ResolveFailureAsync(failure.Id);
+        _resolvingId = null;
+
+        if (result.IsSuccess)
+        {
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+
+    private async Task RebuildAsync()
+    {
+        _isRebuilding = true;
+        _rebuildMessage = null;
+
+        var result = await ProjectionAdminService.RebuildAsync();
+
+        _isRebuilding = false;
+        _confirmingRebuild = false;
+
+        if (result.IsSuccess)
+        {
+            _rebuildMessage = result.Data?.Message ?? "Reconstrucción en curso.";
+            await LoadAsync();
+        }
+        else
+        {
+            _actionError = result.Error;
+        }
+    }
+}

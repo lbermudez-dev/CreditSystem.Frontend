@@ -67,4 +67,13 @@ public sealed class LoanService : ILoanService
             .BuildUrl($"{BasePath}/paid-off");
         return _apiClient.GetAsync<List<PaidOffLoanResponse>>(url, ct);
     }
+
+    public Task<ApiResult<List<PendingDisbursementResponse>>> GetPendingDisbursementsAsync(CancellationToken ct = default)
+        => _apiClient.GetAsync<List<PendingDisbursementResponse>>($"{BasePath}/pending-disbursement", ct);
+
+    public Task<ApiResult<ConfirmDisbursementResponse>> ConfirmDisbursementAsync(Guid loanId, ConfirmDisbursementRequest request, CancellationToken ct = default)
+        => _apiClient.PostAsync<ConfirmDisbursementRequest, ConfirmDisbursementResponse>($"{BasePath}/{loanId}/confirm-disbursement", request, ct: ct);
+
+    public Task<ApiResult<FailDisbursementResponse>> FailDisbursementAsync(Guid loanId, FailDisbursementRequest request, CancellationToken ct = default)
+        => _apiClient.PostAsync<FailDisbursementRequest, FailDisbursementResponse>($"{BasePath}/{loanId}/fail-disbursement", request, ct: ct);
 }

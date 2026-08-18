@@ -1,0 +1,81 @@
+@page "/politicas"
+@inject IUnderwritingPolicyService UnderwritingPolicyService
+
+<PageTitle>Políticas de Originación | CACE</PageTitle>
+
+<PageHeader Title="Políticas de Originación" Icon="rule"
+            Subtitle="GET /api/v1/underwriting-policies — endpoint agregado al backend despues del ultimo open_api.json sincronizado. Catálogo de políticas referenciadas por los productos de crédito (CreateProductRequest.UnderwritingPolicyId) al evaluar el motor de reglas (ContractEngine)." />
+
+<DataTable TItem="UnderwritingPolicyResponse"
+           IsLoading="_isLoading"
+           Error="_error"
+           Items="_policies"
+           EmptyIcon="rule"
+           EmptyTitle="Sin políticas registradas"
+           OnRetry="LoadAsync">
+    <HeaderTemplate>
+        <th>Id</th>
+        <th class="text-end">Tasa Base</th>
+        <th class="text-end">DTI Máximo</th>
+        <th class="text-end">Multiplicador de Aportes</th>
+        <th class="text-center">Exige Membresía Activa</th>
+        <th class="text-center">Días de Gracia</th>
+        <th class="text-end">Tasa de Mora</th>
+        <th class="text-end">Comisión de Originación</th>
+        <th class="text-center">Días para Default Automático</th>
+        <th>Sin Score</th>
+    </HeaderTemplate>
+    <RowTemplate Context="p">
+        <td class="cace-table-mono fw-semibold">@p.Id</td>
+        <td class="text-end cace-table-mono">@p.BaseInterestRate.ToString("0.00")%</td>
+        <td class="text-end cace-table-mono">@p.MaxDtiRatio.ToString("0.00")%</td>
+        <td class="text-end cace-table-mono">@p.SharesMultiplierLimit@(p.EnforceSharesCapacityLimit ? "×" : "× (no forzado)")</td>
+        <td class="text-center">
+            @if (p.RequireActiveMembership)
+            {
+                <span class="material-symbols-outlined text-success" style="font-size:18px;">check_circle</span>
+            }
+            else
+            {
+                <span class="material-symbols-outlined text-muted" style="font-size:18px;">remove</span>
+            }
+        </td>
+        <td class="text-center">@p.GracePeriodDays</td>
+        <td class="text-end cace-table-mono">@p.PenaltyRate.ToString("0.00")%</td>
+        <td class="text-end cace-table-mono">@p.OriginationFeeRate.ToString("0.00")%</td>
+        <td class="text-center">@p.AutoDefaultThresholdDays</td>
+        <td><span class="cace-badge cace-badge-neutral">@(p.NoScoreBehavior ?? "—")</span></td>
+    </RowTemplate>
+</DataTable>
+
+<p class="small text-muted mt-3">
+    DOCUMENTACION INSUFICIENTE: el backend no expone todavía un endpoint para crear/editar políticas
+    ni para consultar una por Id — este catálogo es de solo lectura.
+</p>
+
+@code {
+    private bool _isLoading = true;
+    private ApiError? _error;
+    private List<UnderwritingPolicyResponse>? _policies;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        StateHasChanged();
+
+        var result = await UnderwritingPolicyService.GetAllAsync();
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _policies = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+}
