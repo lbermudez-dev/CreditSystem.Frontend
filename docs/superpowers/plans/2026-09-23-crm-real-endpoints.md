@@ -10,7 +10,7 @@
 
 **Tech Stack:** .NET 9, Blazor Server (Interactive Server), `IHttpClientFactory`, `System.Text.Json`.
 
-> **Revisión 2026-09-23 (frontend-handoff):** `docs/frontend-handoff.md` documenta las correcciones del backend RiskEngine (13 operaciones, matrices versionadas, formato `ProblemDetails` con `code`). La **Fase 0 (Tasks 0.2–0.4) fue reescrita** en consecuencia; las Fases 1–5 no cambian. Ya no aplica el "recorte a 4 endpoints".
+> **Revisión 2026-09-23 (frontend-handoff):** `docs/frontend-handoff.md` documenta las correcciones del backend RiskEngine (12 operaciones, matrices versionadas, formato `ProblemDetails` con `code`). La **Fase 0 (Tasks 0.2–0.4) fue reescrita** en consecuencia; las Fases 1–5 no cambian. Ya no aplica el "recorte a 4 endpoints".
 
 **Spec:** No hay spec formal — el contrato es el swagger **vivo** de `Crm.WebApi`, obtenido en esta sesión desde `http://localhost:5000/swagger/crm/v1/swagger.json` (gateway YARP corriendo localmente) y confirmado con `curl` contra endpoints reales de lectura. Copia local de referencia: pedir de nuevo con `curl http://localhost:5000/swagger/crm/v1/swagger.json` si hace falta revalidar — **no** usar `Docs/credit-system.json`, que solo documenta el backend `CreditSystem.Api` (Core), no CRM.
 
@@ -33,7 +33,7 @@
 | `RiskEngineService.cs`: "¿Crm.WebApi está detrás del mismo gateway?" | **Sí**, confirmado en `CreditApiGateway/appsettings.json` (clusters `credit-backend` / `crm-backend`, mismo host `:5000`). |
 | `appsettings.Development.json` `BaseUrl=https://localhost:5001/` | **Incorrecto para probar contra el gateway real** — el gateway corre en `http://localhost:5000/` (HTTP, no HTTPS, puerto 5000). Corregir en Fase 0. |
 | Catálogo de `RiskMatrixStatus`, `RiskRuleType`, `RiskRuleTargetField` | El handoff confirma `Status` = `Draft`/`Active`/`Superseded` y `RuleType` = `RangeCheck`/`ThresholdCheck`/`EnumCheck`. `TargetField` sigue sin catálogo. Los enums previos eran erróneos (`Archived`, `MinThreshold`, …) y se reemplazan por `string` (Task 0.2). |
-| ¿`IRiskEngineService` cubre todo lo que expone el backend? | **Sí, tras el handoff**: 13 operaciones (CRUD de reglas con bloqueos 409, listado/detalle/alta/`new-version`/`activate`/`delete` de matrices, evaluaciones). **No existe** `PUT /risk-matrices/{id}` (405): editar = `new-version`. Ver Tasks 0.2–0.4. |
+| ¿`IRiskEngineService` cubre todo lo que expone el backend? | **Sí, tras el handoff**: 12 operaciones (CRUD de reglas con bloqueos 409, listado/detalle/alta/`new-version`/`activate`/`delete` de matrices, evaluaciones). **No existe** `PUT /risk-matrices/{id}` (405): editar = `new-version`. Ver Tasks 0.2–0.4. |
 | Forma de `CustomerDetailDto` (`GET /customers/{id}`, swagger no documenta el 200) | Confirmado con `curl` real: `{id, externalCode, identificationType, identificationNumber, fullName, displayName, birthDate, status, createdAt, updatedAt}` — **no** incluye `addresses`/`contacts`/`workInfos`/financieros. |
 | `GET /prospects/{id}` con un GUID inexistente | Devuelve **500** ("Server failure"), no 404 — bug de manejo de errores en el backend. Documentar como incertidumbre, no intentar "arreglarlo" desde el frontend más allá de mostrar el `ErrorState` genérico. |
 
@@ -87,7 +87,7 @@ git commit -m "fix: apuntar Api:BaseUrl al gateway real (localhost:5000)"
 
 ---
 
-### Task 0.2: Modelos y servicio RiskEngine completos (13 operaciones)
+### Task 0.2: Modelos y servicio RiskEngine completos (12 operaciones)
 
 > **Revisado con `docs/frontend-handoff.md`.** Esta task reemplaza el recorte anterior a 4 endpoints: el backend ya expone el mantenimiento completo.
 
@@ -130,7 +130,7 @@ POST   /risk-evaluations                    201 RiskEvaluationDto      | 400, 42
 - Modify: `Services/Api/Dummy/DummyDataFactory.cs` / `DummyApiClient.cs` si referencian los enums borrados
 
 **Interfaces:**
-- Produces: `IRiskEngineService` con 13 métodos (abajo), consumido por las páginas de la Task 0.4 y por Fase 2 (`RiskEvaluationResponse`/`ScoreCardEntryResponse` no se tocan).
+- Produces: `IRiskEngineService` con 12 métodos (abajo), consumido por las páginas de la Task 0.4 y por Fase 2 (`RiskEvaluationResponse`/`ScoreCardEntryResponse` no se tocan).
 
 - [ ] **Step 1: Fijar el contrato con `curl`** (gateway corriendo):
 
@@ -273,7 +273,7 @@ El backend responde `ProblemDetails` con un campo `code` (`RiskRule.InUse`, `Ris
 
 ```bash
 git add Src/CreditSystem.Frontend.Web/Models Src/CreditSystem.Frontend.Web/Services
-git commit -m "feat: RiskEngine completo (13 operaciones) y propagar code/detail de ProblemDetails"
+git commit -m "feat: RiskEngine completo (12 operaciones) y propagar code/detail de ProblemDetails"
 ```
 
 ---
@@ -1650,11 +1650,11 @@ git commit -m "feat: conectar CRM ExternalCustomers a endpoint real"
 
 ## Self-Review
 
-**1. Cobertura del swagger CRM vivo (34 operaciones, 7 tags):**
+**1. Cobertura del swagger CRM vivo (33 operaciones, 7 tags):**
 
 | Tag | Operaciones | Fase |
 |---|---|---|
-| RiskEngine | 13/13 | Fase 0 (Tasks 0.2–0.4) |
+| RiskEngine | 12/12 | Fase 0 (Tasks 0.2–0.4) |
 | Prospects | 3/3 | Fase 1 |
 | Documents | 3/3 | Fase 2 |
 | CreditApplications | 7/7 | Fase 2 |
@@ -1662,7 +1662,7 @@ git commit -m "feat: conectar CRM ExternalCustomers a endpoint real"
 | Customers | 5/5 | Fase 4 |
 | ExternalCustomers | 1/1 | Fase 5 |
 
-34/34 operaciones cubiertas. Ninguna pantalla nueva inventa un endpoint que no esté en el swagger vivo.
+33/33 operaciones cubiertas. Ninguna pantalla nueva inventa un endpoint que no esté en el swagger vivo.
 
 **2. Placeholders:** ninguno — cada DTO, ruta y firma de método está tomada del swagger vivo o de una llamada `curl` real (`CustomerDetailResponse`); cada página especifica exactamente qué campos muestra y qué método de servicio llama.
 
