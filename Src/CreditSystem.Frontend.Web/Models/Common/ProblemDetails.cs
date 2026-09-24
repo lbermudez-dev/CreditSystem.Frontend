@@ -18,5 +18,10 @@ public sealed class ProblemDetails
     public int? Status { get; set; }
     public string? Detail { get; set; }
     public string? Instance { get; set; }
+
+    // Extensiones del ProblemDetails del backend CRM (ej. "RiskRule.InUse").
+    public string? Code { get; set; }
+    public string? TraceId { get; set; }
+
     public Dictionary<string, string[]>? Errors { get; set; }
 }

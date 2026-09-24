@@ -281,11 +281,12 @@ public sealed class ApiClient : IApiClient
         return new ApiError
         {
             StatusCode = statusCode,
+            Code = problem?.Code,
             Message = statusCode switch
             {
                 401 => "No autorizado. Verifique la configuracion de la ApiKey.",
                 403 => "No tiene permisos para realizar esta accion.",
-                404 => "El recurso solicitado no existe.",
+                404 => problem?.Detail ?? "El recurso solicitado no existe.",
                 409 => problem?.Detail ?? "La operacion entra en conflicto con el estado actual del recurso.",
                 400 or 422 => problem?.Detail ?? problem?.Title ?? "Los datos enviados no son validos.",
                 >= 500 => "Ocurrio un error en el servidor. Intente nuevamente mas tarde.",

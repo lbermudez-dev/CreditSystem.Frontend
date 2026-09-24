@@ -47,6 +47,9 @@ public sealed class ApiError
     public int? StatusCode { get; init; }
     public string Message { get; init; } = "Ocurrio un error inesperado.";
 
+    /// <summary>Codigo de error del backend (ProblemDetails.code, ej. "RiskMatrix.NotDraft"); la UI decide por este valor.</summary>
+    public string? Code { get; init; }
+
     /// <summary>
     /// Errores de validacion por campo, cuando el backend los devuelve
     /// estructurados (formato exacto no documentado en los .md; se
