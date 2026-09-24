@@ -21,23 +21,17 @@
             <div class="col-6">
                 <label class="form-label small fw-semibold text-uppercase text-muted">Tipo de Regla</label>
                 <InputSelect class="form-select" @bind-Value="_request.RuleType">
-                    <option value="@RiskRuleType.MinThreshold">Umbral mínimo</option>
-                    <option value="@RiskRuleType.MaxThreshold">Umbral máximo</option>
-                    <option value="@RiskRuleType.Range">Rango</option>
-                    <option value="@RiskRuleType.Blacklist">Lista de exclusión</option>
-                    <option value="@RiskRuleType.Whitelist">Lista permitida</option>
+                    <option value="RangeCheck">Rango (RangeCheck)</option>
+                    <option value="ThresholdCheck">Umbral (ThresholdCheck)</option>
+                    <option value="EnumCheck">Enumerado (EnumCheck)</option>
                 </InputSelect>
             </div>
             <div class="col-6">
                 <label class="form-label small fw-semibold text-uppercase text-muted">Campo Objetivo</label>
-                <InputSelect class="form-select" @bind-Value="_request.TargetField">
-                    <option value="@RiskRuleTargetField.CreditScore">Score crediticio</option>
-                    <option value="@RiskRuleTargetField.MonthlyIncome">Ingreso mensual</option>
-                    <option value="@RiskRuleTargetField.MonthlyDebt">Deuda mensual</option>
-                    <option value="@RiskRuleTargetField.Salary">Salario</option>
-                </InputSelect>
+                @* DOCUMENTACION INSUFICIENTE: catalogo no confirmado de targetField; texto libre, el backend valida. *@
+                <InputText class="form-control" @bind-Value="_request.TargetField" placeholder="ej. MonthlyIncome" />
             </div>
-        </div>
+    </div>
 
         <div class="mb-3 mt-3">
             <label class="form-label small fw-semibold text-uppercase text-muted">Peso</label>
@@ -122,9 +116,13 @@
 
         _isSubmitting = true;
 
-        _request.Parameters = _parameterRows
-            .Where(r => !string.IsNullOrWhiteSpace(r.Key))
-            .ToDictionary(r => r.Key, r => r.Value);
+        // Claves repetidas: gana la ultima (ToDictionary lanzaria y tumbaria el circuito).
+        var parameters = new Dictionary<string, string>();
+        foreach (var row in _parameterRows.Where(r => !string.IsNullOrWhiteSpace(r.Key)))
+        {
+            parameters[row.Key] = row.Value;
+        }
+        _request.Parameters = parameters;
 
         var result = await RiskEngineService.CreateRiskRuleAsync(_request);
 

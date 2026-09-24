@@ -30,6 +30,10 @@ else if (_loadError is not null)
 }
 else if (_rule is not null)
 {
+    @if (_deleteError is not null)
+    {
+        <div class="alert alert-danger small mb-2" style="max-width:680px;">@_deleteError.Message</div>
+    }
     @if (_deleteBlockedReason is not null)
     {
         <div class="text-danger small mb-2" style="max-width:680px;white-space:pre-wrap;">No se puede eliminar: @_deleteBlockedReason</div>
@@ -47,21 +51,15 @@ else if (_rule is not null)
                 <div class="col-6">
                     <label class="form-label small fw-semibold text-uppercase text-muted">Tipo de Regla</label>
                     <InputSelect class="form-select" @bind-Value="_updateRequest.RuleType">
-                        <option value="@RiskRuleType.MinThreshold">Umbral mínimo</option>
-                        <option value="@RiskRuleType.MaxThreshold">Umbral máximo</option>
-                        <option value="@RiskRuleType.Range">Rango</option>
-                        <option value="@RiskRuleType.Blacklist">Lista de exclusión</option>
-                        <option value="@RiskRuleType.Whitelist">Lista permitida</option>
+                        <option value="RangeCheck">Rango (RangeCheck)</option>
+                        <option value="ThresholdCheck">Umbral (ThresholdCheck)</option>
+                        <option value="EnumCheck">Enumerado (EnumCheck)</option>
                     </InputSelect>
                 </div>
                 <div class="col-6">
                     <label class="form-label small fw-semibold text-uppercase text-muted">Campo Objetivo</label>
-                    <InputSelect class="form-select" @bind-Value="_updateRequest.TargetField">
-                        <option value="@RiskRuleTargetField.CreditScore">Score crediticio</option>
-                        <option value="@RiskRuleTargetField.MonthlyIncome">Ingreso mensual</option>
-                        <option value="@RiskRuleTargetField.MonthlyDebt">Deuda mensual</option>
-                        <option value="@RiskRuleTargetField.Salary">Salario</option>
-                    </InputSelect>
+                    @* DOCUMENTACION INSUFICIENTE: catalogo no confirmado de targetField; texto libre, el backend valida. *@
+                    <InputText class="form-control" @bind-Value="_updateRequest.TargetField" placeholder="ej. MonthlyIncome" />
                 </div>
             </div>
 
@@ -177,6 +175,7 @@ else if (_rule is not null)
     private string? _updateBlockedReason;
     private string? _deleteBlockedReason;
 
+    private ApiError? _deleteError;
     private bool _showDeleteConfirm;
     private bool _isDeleting;
 
@@ -219,6 +218,17 @@ else if (_rule is not null)
 
     private void RemoveParameterRow(ParamRow row) => _parameterRows.Remove(row);
 
+    // Claves repetidas: gana la ultima (ToDictionary lanzaria y tumbaria el circuito).
+    private Dictionary<string, string> BuildParameters()
+    {
+        var dict = new Dictionary<string, string>();
+        foreach (var row in _parameterRows.Where(r => !string.IsNullOrWhiteSpace(r.Key)))
+        {
+            dict[row.Key] = row.Value;
+        }
+        return dict;
+    }
+
     private void CloseConflict() => _conflictMessage = null;
 
     private static bool IsInUseConflict(ApiError? e) =>
@@ -243,9 +253,7 @@ else if (_rule is not null)
 
         _isSaving = true;
 
-        _updateRequest.Parameters = _parameterRows
-            .Where(r => !string.IsNullOrWhiteSpace(r.Key))
-            .ToDictionary(r => r.Key, r => r.Value);
+        _updateRequest.Parameters = BuildParameters();
 
         var result = await RiskEngineService.UpdateRiskRuleAsync(Id, _updateRequest);
 
@@ -270,6 +278,7 @@ else if (_rule is not null)
     private async Task DeleteAsync()
     {
         _isDeleting = true;
+        _deleteError = null;
 
         var result = await RiskEngineService.DeleteRiskRuleAsync(Id);
 
@@ -290,6 +299,6 @@ else if (_rule is not null)
             return;
         }
 
-        _saveError = result.Error;
+        _deleteError = result.Error;
     }
 }
