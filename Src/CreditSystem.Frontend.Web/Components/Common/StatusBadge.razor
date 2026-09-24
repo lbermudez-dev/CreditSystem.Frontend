@@ -3,7 +3,7 @@
    DOCUMENTACION INSUFICIENTE: el swagger tipa "status" como string sin
    enum ni catálogo de valores posibles. Los literales de abajo (Approved,
    Active, Delinquent, Default, Restructured, PaidOff, Pending, Frozen,
-   Closed) son una inferencia razonable de la documentación funcional
+   Closed, Draft, Superseded) son una inferencia razonable de la documentación funcional
    previa — confirmar contra el backend real y ajustar el switch si los
    valores exactos (mayúsculas/minúsculas, nombres) difieren. Cualquier
    valor no reconocido se muestra tal cual llega (fallback "_ => Status"). *@
@@ -25,6 +25,8 @@
         "Frozen" => "Congelada",
         "Closed" => "Cerrada",
         "Disbursing" => "Desembolsando",
+        "Draft" => "Borrador",
+        "Superseded" => "Reemplazada",
         _ => Status
     };
 
@@ -34,8 +36,9 @@
         "Approved" or "Pending" => "cace-badge-info",
         "Delinquent" or "Frozen" or "Disbursing" => "cace-badge-warning",
         "Default" => "cace-badge-danger",
-        "PaidOff" or "Closed" => "cace-badge-neutral",
+        "PaidOff" or "Closed" or "Draft" => "cace-badge-neutral",
         "Restructured" => "cace-badge-info",
+        "Superseded" => "cace-badge-warning",
         _ => "cace-badge-neutral"
     };
 }

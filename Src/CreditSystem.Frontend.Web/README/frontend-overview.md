@@ -206,7 +206,7 @@ Primer módulo del frontend que consume un swagger distinto (`openapi_crm.txt`, 
 - **Tipado string.** `RuleType`, `TargetField` y `Status` viajan como `string`; los estados de matriz están en `Models/Common/RiskMatrixStatuses.cs` (`Draft`, `Active`, `Superseded`). No hay enums C# para estos campos.
 - **Validaciones de cliente** (espejo de errores 400 del backend): umbral de aprobación > umbral de rechazo, al menos una regla, `MinScore <= MaxScore` en bandas de precio, peso de regla > 0.
 
-`IRiskEngineService` (no confundir con `IRiskService`, que es el grupo "Risk Classification" de `CreditSystem.Api`) reutiliza el mismo `IApiClient`/`HttpClient` "CreditSystemApi" y el mismo `Api:BaseUrl`/`ApiKey` que el resto de la app — **DOCUMENTACION INSUFICIENTE**: se asume que `Crm.WebApi` está detrás del mismo gateway; si no es así, hará falta una configuración/`HttpClient` propia solo para este módulo.
+`IRiskEngineService` (no confundir con `IRiskService`, que es el grupo "Risk Classification" de `CreditSystem.Api`) reutiliza el mismo `IApiClient`/`HttpClient` "CreditSystemApi" y el mismo `Api:BaseUrl`/`ApiKey` que el resto de la app — confirmado: `Crm.WebApi` está detrás del mismo gateway (`localhost:5000`), no hace falta configuración propia.
 
 `IApiClient` se extendió con `DeleteAsync` (antes no existía ningún endpoint `DELETE` en el frontend) — implementado en `ApiClient` (`HttpClient.DeleteAsync`) y en `DummyApiClient` (mismo patrón que `PostAsync`/`PutAsync` sin body).
 
@@ -227,7 +227,6 @@ Todas están marcadas en el código con `DOCUMENTACION INSUFICIENTE` para que se
 | Catálogo de `EventType` para webhooks | `Configuracion/Webhooks.razor` | Inferido de la lista de eventos de `credit-system-presentacion-ejecutiva.md` (§12) |
 | Literales exactos de `ProductResponse.Status` (`"Active"`/`"Inactive"` vs `"0"`/`"1"`) | `Productos/Listado.razor` | Se comparan ambas formas antes de alternar el estado |
 | Catálogo de `targetField` de reglas de riesgo | `Crm/Riesgo/ReglaNueva.razor`, `ReglaDetalle.razor` | Única incertidumbre del módulo de riesgo: el backend no publica el catálogo; se captura como texto libre y el backend valida |
-| Si `Crm.WebApi` está detrás del mismo gateway/`BaseUrl`/`ApiKey` que `CreditSystem.Api` | `Services/Api/RiskEngineService.cs` | Se asume que sí (mismo `IApiClient`); si no, hace falta una configuración/`HttpClient` propia solo para el módulo CRM |
 
 Cuando el backend real confirme cualquiera de estos puntos, actualizar el archivo correspondiente **y borrar la fila de esta tabla**.
 
@@ -241,5 +240,5 @@ dotnet build
 dotnet run
 ```
 
-- Con `appsettings.Development.json` (`DummyData:Enabled = true`), la app arranca en modo demo sin necesitar backend.
+- `appsettings.Development.json` ahora trae `DummyData:Enabled=false` y `Api:BaseUrl=http://localhost:5000/` (gateway real); poner `DummyData:Enabled=true` localmente para maquetar layouts sin backend.
 - Para apuntar al backend real: poner `DummyData:Enabled = false` y completar `Api:BaseUrl` / `Api:ApiKey` (por `dotnet user-secrets` en desarrollo, no hardcodeado).
