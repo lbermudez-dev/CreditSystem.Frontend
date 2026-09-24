@@ -4,7 +4,6 @@
 // volver a sincronizar contra el swagger real si este cambia.
 // </auto-generated>
 
-using CreditSystem.Frontend.Web.Models.Enums;
 
 namespace CreditSystem.Frontend.Web.Models.Responses;
 
@@ -12,8 +11,8 @@ public sealed class RiskRuleResponse
 {
     public Guid Id { get; set; }
     public string? Name { get; set; }
-    public RiskRuleType RuleType { get; set; }
-    public RiskRuleTargetField TargetField { get; set; }
+    public string? RuleType { get; set; }      // RangeCheck | ThresholdCheck | EnumCheck
+    public string? TargetField { get; set; }   // DOCUMENTACION INSUFICIENTE: sin catalogo confirmado
     public Dictionary<string, string>? Parameters { get; set; }
     public double Weight { get; set; }
     public DateTime CreatedAt { get; set; }

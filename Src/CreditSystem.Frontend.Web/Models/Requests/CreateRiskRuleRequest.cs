@@ -4,15 +4,14 @@
 // mano sin volver a sincronizar contra el swagger real si este cambia.
 // </auto-generated>
 
-using CreditSystem.Frontend.Web.Models.Enums;
 
 namespace CreditSystem.Frontend.Web.Models.Requests;
 
 public sealed class CreateRiskRuleRequest
 {
     public string? Name { get; set; }
-    public RiskRuleType RuleType { get; set; }
-    public RiskRuleTargetField TargetField { get; set; }
+    public string? RuleType { get; set; }
+    public string? TargetField { get; set; }
     public Dictionary<string, string>? Parameters { get; set; }
     public double Weight { get; set; }
 }

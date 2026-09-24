@@ -4,7 +4,6 @@
 // mano sin volver a sincronizar contra el swagger real si este cambia.
 // </auto-generated>
 
-using CreditSystem.Frontend.Web.Models.Enums;
 
 namespace CreditSystem.Frontend.Web.Models.Responses;
 
@@ -12,7 +11,7 @@ public sealed class ScoreCardEntryResponse
 {
     public Guid RuleId { get; set; }
     public string? RuleName { get; set; }
-    public RiskRuleTargetField TargetField { get; set; }
+    public string? TargetField { get; set; }
     public string? ObservedValue { get; set; }
     public bool Passed { get; set; }
     public double WeightedContribution { get; set; }

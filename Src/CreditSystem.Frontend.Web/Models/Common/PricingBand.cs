@@ -8,8 +8,9 @@ namespace CreditSystem.Frontend.Web.Models.Common;
 
 /// <summary>
 /// Banda de precio (rango de score -> tasa de interes / monto maximo). El
-/// shape es identico en las 3 direcciones del swagger CRM en las que
-/// aparece (CreateRiskMatrixDto, UpdateRiskMatrixDto, RiskMatrixDetailDto),
+/// shape es identico en las direcciones del swagger CRM en las que
+/// aparece (CreateRiskMatrixDto, NewVersion y RiskMatrixDetailDto; ya no
+/// aparece en UpdateRiskMatrixDto porque PUT /risk-matrices/{id} no existe),
 /// por eso se modela una sola vez aqui en vez de duplicarlo en Requests y
 /// Responses.
 /// </summary>

@@ -33,8 +33,13 @@ public sealed class RiskEngineService : IRiskEngineService
     public Task<ApiResult> DeleteRiskRuleAsync(Guid id, CancellationToken ct = default)
         => _apiClient.DeleteAsync($"{RiskRulesBasePath}/{id}", ct);
 
-    public Task<ApiResult<List<RiskMatrixResponse>>> ListRiskMatricesAsync(CancellationToken ct = default)
-        => _apiClient.GetAsync<List<RiskMatrixResponse>>(RiskMatricesBasePath, ct);
+    public Task<ApiResult<List<RiskMatrixResponse>>> ListRiskMatricesAsync(string? status = null, CancellationToken ct = default)
+    {
+        var uri = string.IsNullOrEmpty(status)
+            ? RiskMatricesBasePath
+            : $"{RiskMatricesBasePath}?status={Uri.EscapeDataString(status)}";
+        return _apiClient.GetAsync<List<RiskMatrixResponse>>(uri, ct);
+    }
 
     public Task<ApiResult<RiskMatrixDetailResponse>> GetRiskMatrixAsync(Guid id, CancellationToken ct = default)
         => _apiClient.GetAsync<RiskMatrixDetailResponse>($"{RiskMatricesBasePath}/{id}", ct);
@@ -42,8 +47,11 @@ public sealed class RiskEngineService : IRiskEngineService
     public Task<ApiResult<RiskMatrixResponse>> CreateRiskMatrixAsync(CreateRiskMatrixRequest request, CancellationToken ct = default)
         => _apiClient.PostAsync<CreateRiskMatrixRequest, RiskMatrixResponse>(RiskMatricesBasePath, request, ct: ct);
 
-    public Task<ApiResult<RiskMatrixResponse>> UpdateRiskMatrixAsync(Guid id, UpdateRiskMatrixRequest request, CancellationToken ct = default)
-        => _apiClient.PutAsync<UpdateRiskMatrixRequest, RiskMatrixResponse>($"{RiskMatricesBasePath}/{id}", request, ct);
+    // Request null -> body con todos los campos null (JsonSerializerDefaults.Web los
+    // escribe como null explicito); el backend los trata como "omitido" y copia del origen.
+    public Task<ApiResult<RiskMatrixDetailResponse>> CreateRiskMatrixVersionAsync(Guid id, CreateRiskMatrixVersionRequest? request = null, CancellationToken ct = default)
+        => _apiClient.PostAsync<CreateRiskMatrixVersionRequest, RiskMatrixDetailResponse>(
+            $"{RiskMatricesBasePath}/{id}/new-version", request ?? new CreateRiskMatrixVersionRequest(), ct: ct);
 
     public Task<ApiResult> DeleteRiskMatrixAsync(Guid id, CancellationToken ct = default)
         => _apiClient.DeleteAsync($"{RiskMatricesBasePath}/{id}", ct);

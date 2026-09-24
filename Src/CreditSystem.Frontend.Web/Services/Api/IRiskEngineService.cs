@@ -9,9 +9,6 @@ namespace CreditSystem.Frontend.Web.Services.Api;
 /// /api/v1/risk-rules, /api/v1/risk-matrices y /api/v1/risk-evaluations.
 /// No confundir con IRiskService (grupo "Risk Classification" de
 /// CreditSystem.Api, /api/v1/loans/risk-summary — dominio distinto).
-/// DOCUMENTACION INSUFICIENTE: se asume que Crm.WebApi esta detras del
-/// mismo gateway/BaseUrl/ApiKey que CreditSystem.Api, por eso este
-/// servicio delega en el mismo IApiClient sin config propia.
 /// </summary>
 public interface IRiskEngineService
 {
@@ -24,14 +21,14 @@ public interface IRiskEngineService
     /// <summary>POST /api/v1/risk-rules</summary>
     Task<ApiResult<RiskRuleResponse>> CreateRiskRuleAsync(CreateRiskRuleRequest request, CancellationToken ct = default);
 
-    /// <summary>PUT /api/v1/risk-rules/{id}</summary>
+    /// <summary>PUT /api/v1/risk-rules/{id} — 409 RiskRule.NotEditableInUse si esta en matriz Active/Superseded</summary>
     Task<ApiResult<RiskRuleResponse>> UpdateRiskRuleAsync(Guid id, UpdateRiskRuleRequest request, CancellationToken ct = default);
 
-    /// <summary>DELETE /api/v1/risk-rules/{id}</summary>
+    /// <summary>DELETE /api/v1/risk-rules/{id} — 409 RiskRule.InUse si esta en cualquier matriz</summary>
     Task<ApiResult> DeleteRiskRuleAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>GET /api/v1/risk-matrices</summary>
-    Task<ApiResult<List<RiskMatrixResponse>>> ListRiskMatricesAsync(CancellationToken ct = default);
+    /// <summary>GET /api/v1/risk-matrices?status= (Draft|Active|Superseded; null = todas)</summary>
+    Task<ApiResult<List<RiskMatrixResponse>>> ListRiskMatricesAsync(string? status = null, CancellationToken ct = default);
 
     /// <summary>GET /api/v1/risk-matrices/{id}</summary>
     Task<ApiResult<RiskMatrixDetailResponse>> GetRiskMatrixAsync(Guid id, CancellationToken ct = default);
@@ -39,13 +36,13 @@ public interface IRiskEngineService
     /// <summary>POST /api/v1/risk-matrices</summary>
     Task<ApiResult<RiskMatrixResponse>> CreateRiskMatrixAsync(CreateRiskMatrixRequest request, CancellationToken ct = default);
 
-    /// <summary>PUT /api/v1/risk-matrices/{id}</summary>
-    Task<ApiResult<RiskMatrixResponse>> UpdateRiskMatrixAsync(Guid id, UpdateRiskMatrixRequest request, CancellationToken ct = default);
+    /// <summary>POST /api/v1/risk-matrices/{id}/new-version — crea un Draft (version + 1); body opcional</summary>
+    Task<ApiResult<RiskMatrixDetailResponse>> CreateRiskMatrixVersionAsync(Guid id, CreateRiskMatrixVersionRequest? request = null, CancellationToken ct = default);
 
-    /// <summary>DELETE /api/v1/risk-matrices/{id}</summary>
+    /// <summary>DELETE /api/v1/risk-matrices/{id} — 422 RiskMatrix.NotEditable si no es Draft</summary>
     Task<ApiResult> DeleteRiskMatrixAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>POST /api/v1/risk-matrices/{id}/activate</summary>
+    /// <summary>POST /api/v1/risk-matrices/{id}/activate — 422 RiskMatrix.NotDraft si no es Draft</summary>
     Task<ApiResult> ActivateRiskMatrixAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>POST /api/v1/risk-evaluations</summary>

@@ -5,7 +5,6 @@
 // </auto-generated>
 
 using CreditSystem.Frontend.Web.Models.Common;
-using CreditSystem.Frontend.Web.Models.Enums;
 
 namespace CreditSystem.Frontend.Web.Models.Responses;
 
@@ -14,10 +13,10 @@ public sealed class RiskMatrixDetailResponse
     public Guid Id { get; set; }
     public string? Name { get; set; }
     public int Version { get; set; }
-    public RiskMatrixStatus Status { get; set; }
+    public string? Status { get; set; }        // ver RiskMatrixStatuses
     public double AutoApproveThreshold { get; set; }
     public double AutoRejectThreshold { get; set; }
     public DateTime CreatedAt { get; set; }
-    public List<RiskMatrixRuleDetailResponse>? Rules { get; set; }
+    public List<RiskMatrixRuleResponse>? Rules { get; set; }
     public List<PricingBand>? PricingBands { get; set; }
 }
