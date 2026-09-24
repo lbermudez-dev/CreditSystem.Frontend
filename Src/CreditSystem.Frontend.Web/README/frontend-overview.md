@@ -195,8 +195,16 @@ Primer módulo del frontend que consume un swagger distinto (`openapi_crm.txt`, 
 | `/crm/riesgo/reglas/{id}` | `Crm/Riesgo/ReglaDetalle.razor` | `GET/PUT/DELETE risk-rules/{id}` |
 | `/crm/riesgo/matrices` | `Crm/Riesgo/MatricesListado.razor` | `GET risk-matrices` |
 | `/crm/riesgo/matrices/nuevo` | `Crm/Riesgo/MatrizNueva.razor` | `POST risk-matrices` |
-| `/crm/riesgo/matrices/{id}` | `Crm/Riesgo/MatrizDetalle.razor` | `GET/PUT/DELETE risk-matrices/{id}`, `POST risk-matrices/{id}/activate` |
+| `/crm/riesgo/matrices/{id}` | `Crm/Riesgo/MatrizDetalle.razor` | `GET/DELETE risk-matrices/{id}`, `POST risk-matrices/{id}/activate` (solo lectura; acciones según `Status`) |
+| `/crm/riesgo/matrices/{id}/nueva-version` | `Crm/Riesgo/MatrizNuevaVersion.razor` | `GET risk-matrices/{id}`, `POST risk-matrices/{id}/new-version` |
 | `/crm/riesgo/evaluaciones` | `Crm/Riesgo/EvaluacionPrueba.razor` | `POST risk-evaluations` |
+
+**Reglas del módulo de riesgo (contrato en `docs/frontend-handoff.md`):**
+
+- **Matrices versionadas, no editables.** No existe `PUT` de matriz. `MatrizDetalle` es solo lectura y ofrece acciones según `Status`: `Draft` -> Activar / Eliminar (el borrado conserva las reglas); `Active` -> "Crear nueva versión" (navega a `nueva-version`); `Superseded` -> ninguna. `MatrizNuevaVersion` envía únicamente los campos que cambiaron y, al recibir 201, navega al `Id` del borrador devuelto (no al del origen). El origen sigue `Active` hasta que se active el borrador. Errores 422 (`RiskMatrix.NotDraft` / `RiskMatrix.NotEditable`) se muestran con el `detail` del backend.
+- **Bloqueo de reglas (409).** `PUT`/`DELETE` de una regla responden 409 (`RiskRule.NotEditableInUse` / `RiskRule.InUse`) si está en una matriz; `ApiError.Message` trae el `detail` con cada matriz, versión y estado y se muestra tal cual. Para cambiar una regla en uso: nueva regla + nueva versión de matriz.
+- **Tipado string.** `RuleType`, `TargetField` y `Status` viajan como `string`; los estados de matriz están en `Models/Common/RiskMatrixStatuses.cs` (`Draft`, `Active`, `Superseded`). No hay enums C# para estos campos.
+- **Validaciones de cliente** (espejo de errores 400 del backend): umbral de aprobación > umbral de rechazo, al menos una regla, `MinScore <= MaxScore` en bandas de precio, peso de regla > 0.
 
 `IRiskEngineService` (no confundir con `IRiskService`, que es el grupo "Risk Classification" de `CreditSystem.Api`) reutiliza el mismo `IApiClient`/`HttpClient` "CreditSystemApi" y el mismo `Api:BaseUrl`/`ApiKey` que el resto de la app — **DOCUMENTACION INSUFICIENTE**: se asume que `Crm.WebApi` está detrás del mismo gateway; si no es así, hará falta una configuración/`HttpClient` propia solo para este módulo.
 
@@ -218,8 +226,7 @@ Todas están marcadas en el código con `DOCUMENTACION INSUFICIENTE` para que se
 | Formato válido del parámetro `format` en `GET .../documents/amortization-table` | `IDocumentService.cs` | Se asume `pdf` / `xlsx` |
 | Catálogo de `EventType` para webhooks | `Configuracion/Webhooks.razor` | Inferido de la lista de eventos de `credit-system-presentacion-ejecutiva.md` (§12) |
 | Literales exactos de `ProductResponse.Status` (`"Active"`/`"Inactive"` vs `"0"`/`"1"`) | `Productos/Listado.razor` | Se comparan ambas formas antes de alternar el estado |
-| Catálogo y casing de `ruleType`/`targetField` de reglas de riesgo (`RiskRuleType`, `RiskRuleTargetField`) | `Models/Enums/RiskRuleType.cs`, `Models/Enums/RiskRuleTargetField.cs` | El swagger CRM expone ambos como `string` libre sin `enum`. Se modelaron como enums C# (con `JsonStringEnumConverter`) a pedido explícito, con la expectativa de migrar a catálogos reales del backend más adelante |
-| Catálogo y casing de `status` de matriz de riesgo (`RiskMatrixStatus`) | `Models/Enums/RiskMatrixStatus.cs` | Igual que arriba; se infirió `Draft`/`Active`/`Archived` de que existe `POST .../activate` y un campo `version` |
+| Catálogo de `targetField` de reglas de riesgo | `Crm/Riesgo/ReglaNueva.razor`, `ReglaDetalle.razor` | Única incertidumbre del módulo de riesgo: el backend no publica el catálogo; se captura como texto libre y el backend valida |
 | Si `Crm.WebApi` está detrás del mismo gateway/`BaseUrl`/`ApiKey` que `CreditSystem.Api` | `Services/Api/RiskEngineService.cs` | Se asume que sí (mismo `IApiClient`); si no, hace falta una configuración/`HttpClient` propia solo para el módulo CRM |
 
 Cuando el backend real confirme cualquiera de estos puntos, actualizar el archivo correspondiente **y borrar la fila de esta tabla**.
