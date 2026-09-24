@@ -10,7 +10,9 @@
     <Actions>
         @if (_rule is not null)
         {
-            <button class="btn btn-outline-danger d-flex align-items-center gap-2" @onclick="() => _showDeleteConfirm = true">
+            <button class="btn btn-outline-danger d-flex align-items-center gap-2"
+                    disabled="@(_deleteBlockedReason is not null)"
+                    @onclick="() => _showDeleteConfirm = true">
                 <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
                 Eliminar
             </button>
@@ -28,6 +30,10 @@ else if (_loadError is not null)
 }
 else if (_rule is not null)
 {
+    @if (_deleteBlockedReason is not null)
+    {
+        <div class="text-danger small mb-2" style="max-width:680px;white-space:pre-wrap;">No se puede eliminar: @_deleteBlockedReason</div>
+    }
     <div class="cace-card p-4" style="max-width:680px;">
         <EditForm Model="_updateRequest" OnValidSubmit="SaveAsync">
             <DataAnnotationsValidator />
@@ -87,8 +93,13 @@ else if (_rule is not null)
                 }
             </div>
 
+            <p class="text-muted small mb-2">Para cambiar una regla en uso, cree una regla nueva y una nueva versión de la matriz que la use.</p>
             <p class="text-muted small mb-0">Creada: @_rule.CreatedAt.ToString("dd/MM/yyyy HH:mm")</p>
 
+            @if (_updateBlockedReason is not null)
+            {
+                <div class="text-danger small mt-3" style="white-space:pre-wrap;">No se puede modificar: @_updateBlockedReason</div>
+            }
             @if (_saveError is not null)
             {
                 <div class="alert alert-danger small mt-3 mb-0">@_saveError.Message</div>
@@ -100,7 +111,7 @@ else if (_rule is not null)
 
             <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
                 <a class="btn btn-outline-secondary" href="/crm/riesgo/reglas">Volver</a>
-                <button type="submit" class="btn btn-primary d-flex align-items-center gap-2" disabled="@_isSaving">
+                <button type="submit" class="btn btn-primary d-flex align-items-center gap-2" disabled="@(_isSaving || _updateBlockedReason is not null)">
                     @if (_isSaving)
                     {
                         <span class="spinner-border spinner-border-sm"></span>
@@ -114,10 +125,31 @@ else if (_rule is not null)
 
 <ConfirmDialog IsVisible="_showDeleteConfirm"
                Title="Eliminar Regla de Riesgo"
-               Message="¿Está seguro de eliminar esta regla? Si está asociada a una matriz de riesgo, la matriz quedará referenciando una regla inexistente."
+               Message="¿Está seguro de eliminar esta regla? Si está en uso por una matriz, el sistema no lo permitirá."
                IsBusy="_isDeleting"
                OnConfirm="DeleteAsync"
                OnCancel="() => _showDeleteConfirm = false" />
+
+@if (_conflictMessage is not null)
+{
+    @* 409: el detail del backend lista cada matriz (nombre, version, estado); se muestra tal cual. *@
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.4);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold cace-text-primary">Regla en uso</h5>
+                    <button type="button" class="btn-close" @onclick="CloseConflict" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0" style="white-space:pre-wrap;">@_conflictMessage</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" @onclick="CloseConflict">Entendido</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     [Parameter] public Guid Id { get; set; }
@@ -138,6 +170,12 @@ else if (_rule is not null)
     private bool _isSaving;
     private bool _saveSuccess;
     private ApiError? _saveError;
+
+    // 409 (RiskRule.NotEditableInUse / RiskRule.InUse): el backend es la fuente de verdad;
+    // tras un 409 se deshabilita la accion en la sesion y se muestra el motivo.
+    private string? _conflictMessage;
+    private string? _updateBlockedReason;
+    private string? _deleteBlockedReason;
 
     private bool _showDeleteConfirm;
     private bool _isDeleting;
@@ -181,11 +219,29 @@ else if (_rule is not null)
 
     private void RemoveParameterRow(ParamRow row) => _parameterRows.Remove(row);
 
+    private void CloseConflict() => _conflictMessage = null;
+
+    private static bool IsInUseConflict(ApiError? e) =>
+        e is not null && (e.Code == "RiskRule.NotEditableInUse" || e.Code == "RiskRule.InUse");
+
     private async Task SaveAsync()
     {
-        _isSaving = true;
         _saveError = null;
         _saveSuccess = false;
+
+        if (string.IsNullOrWhiteSpace(_updateRequest.Name) || string.IsNullOrWhiteSpace(_updateRequest.TargetField))
+        {
+            _saveError = new ApiError { Message = "Nombre y campo objetivo son obligatorios." };
+            return;
+        }
+
+        if (_updateRequest.Weight <= 0)
+        {
+            _saveError = new ApiError { Message = "El peso debe ser mayor que 0." };
+            return;
+        }
+
+        _isSaving = true;
 
         _updateRequest.Parameters = _parameterRows
             .Where(r => !string.IsNullOrWhiteSpace(r.Key))
@@ -199,6 +255,11 @@ else if (_rule is not null)
         {
             _saveSuccess = true;
             _rule = result.Data ?? _rule;
+        }
+        else if (IsInUseConflict(result.Error))
+        {
+            _conflictMessage = result.Error!.Message;
+            _updateBlockedReason = result.Error.Message;
         }
         else
         {
@@ -221,6 +282,14 @@ else if (_rule is not null)
         }
 
         _showDeleteConfirm = false;
+
+        if (IsInUseConflict(result.Error))
+        {
+            _conflictMessage = result.Error!.Message;
+            _deleteBlockedReason = result.Error.Message;
+            return;
+        }
+
         _saveError = result.Error;
     }
 }
