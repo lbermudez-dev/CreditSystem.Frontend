@@ -174,6 +174,27 @@ internal static class DummyDataFactory
             return list;
         }
 
+        if (effectiveType.IsGenericType && effectiveType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+        {
+            var genericArgs = effectiveType.GetGenericArguments();
+            var keyType = genericArgs[0];
+            var valueType = genericArgs[1];
+            var dictionary = (IDictionary)Activator.CreateInstance(effectiveType)!;
+            var count = rng.Next(1, 4);
+            for (var i = 0; i < count; i++)
+            {
+                var key = CreateValue(keyType, $"{propertyName}Key", rng, depth + 1);
+                if (key is null || dictionary.Contains(key))
+                {
+                    continue;
+                }
+
+                dictionary.Add(key, CreateValue(valueType, $"{propertyName}Value", rng, depth + 1));
+            }
+
+            return dictionary;
+        }
+
         if (effectiveType.IsClass && effectiveType != typeof(object))
         {
             return CreateComplex(effectiveType, rng, depth);
@@ -188,7 +209,7 @@ internal static class DummyDataFactory
 
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (!prop.CanWrite || prop.GetSetMethod() is null)
+            if (!prop.CanWrite || prop.GetSetMethod() is null || prop.GetIndexParameters().Length > 0)
             {
                 continue;
             }

@@ -1,0 +1,69 @@
+@page "/crm/riesgo/reglas"
+@inject IRiskEngineService RiskEngineService
+
+<PageTitle>Reglas de Riesgo | CACE</PageTitle>
+
+<PageHeader Title="Reglas de Riesgo" Icon="rule"
+            Breadcrumb="CRM / Motor de Riesgo"
+            Subtitle="GET /api/v1/risk-rules">
+    <Actions>
+        <a class="btn btn-primary d-flex align-items-center gap-2" href="/crm/riesgo/reglas/nuevo">
+            <span class="material-symbols-outlined" style="font-size:18px;">add</span>
+            Nueva Regla
+        </a>
+    </Actions>
+</PageHeader>
+
+<DataTable TItem="RiskRuleResponse"
+           IsLoading="_isLoading"
+           Error="_error"
+           Items="_rules"
+           EmptyIcon="rule"
+           EmptyTitle="Sin reglas de riesgo registradas"
+           OnRetry="LoadAsync">
+    <HeaderTemplate>
+        <th>Nombre</th>
+        <th>Tipo</th>
+        <th>Campo Objetivo</th>
+        <th class="text-end">Peso</th>
+        <th>Creada</th>
+        <th></th>
+    </HeaderTemplate>
+    <RowTemplate Context="rule">
+        <td class="fw-semibold">@(rule.Name ?? "—")</td>
+        <td><span class="cace-badge cace-badge-info">@rule.RuleType</span></td>
+        <td>@rule.TargetField</td>
+        <td class="text-end cace-table-mono">@rule.Weight.ToString("0.00")</td>
+        <td>@rule.CreatedAt.ToString("dd/MM/yyyy")</td>
+        <td class="text-end">
+            <a class="btn btn-sm btn-outline-secondary" href="@($"/crm/riesgo/reglas/{rule.Id}")">
+                <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+            </a>
+        </td>
+    </RowTemplate>
+</DataTable>
+
+@code {
+    private bool _isLoading = true;
+    private ApiError? _error;
+    private List<RiskRuleResponse>? _rules;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        var result = await RiskEngineService.ListRiskRulesAsync();
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _rules = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+}

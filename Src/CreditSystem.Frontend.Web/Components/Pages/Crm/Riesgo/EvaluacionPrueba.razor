@@ -1,0 +1,126 @@
+@page "/crm/riesgo/evaluaciones"
+@inject IRiskEngineService RiskEngineService
+
+<PageTitle>Evaluación de Riesgo | CACE</PageTitle>
+
+<PageHeader Title="Evaluación de Riesgo (Prueba)" Icon="fact_check"
+            Breadcrumb="CRM / Motor de Riesgo / Evaluación"
+            Subtitle="POST /api/v1/risk-evaluations — usa siempre la matriz de riesgo actualmente Activa; no permite elegir cuál." />
+
+<div class="cace-card p-4 mb-4" style="max-width:560px;">
+    <label class="form-label small fw-semibold text-uppercase text-muted">GUID de la Solicitud de Crédito (creditApplicationId)</label>
+    <div class="d-flex gap-2">
+        <input class="form-control" @bind="_creditApplicationIdText" @bind:event="oninput" placeholder="3fa85f64-5717-4562-b3fc-2c963f66afa6" />
+        <button class="btn btn-primary d-flex align-items-center gap-2" @onclick="EvaluateAsync" disabled="@_isEvaluating">
+            @if (_isEvaluating)
+            {
+                <span class="spinner-border spinner-border-sm"></span>
+            }
+            Evaluar
+        </button>
+    </div>
+    @if (_invalidId)
+    {
+        <p class="text-danger small mt-1 mb-0">Debe ser un GUID válido.</p>
+    }
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger mb-4">@_error.Message</div>
+}
+
+@if (_result is not null)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <KpiCard Label="Resultado" Value="@(_result.Outcome ?? "—")" Accent="@(IsApproved(_result.Outcome) ? "success" : "danger")" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Puntaje Total" Value="@_result.TotalScore.ToString("0.00")" Accent="secondary" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Tasa Sugerida" Value="@(_result.SuggestedInterestRate?.ToString("0.00") + "%" ?? "—")" Accent="secondary" />
+        </div>
+        <div class="col-md-3">
+            <KpiCard Label="Monto Máx. Sugerido" Value="@(_result.SuggestedMaxAmount is { } amount ? CurrencyFormatter.Format((decimal)amount) : "—")" Accent="secondary" />
+        </div>
+    </div>
+
+    <p class="text-muted small">
+        Matriz usada: <span class="cace-table-mono">@_result.RiskMatrixId</span> (versión @_result.RiskMatrixVersion) ·
+        Evaluada: @_result.EvaluatedAt.ToString("dd/MM/yyyy HH:mm")
+    </p>
+
+    <DataTable TItem="ScoreCardEntryResponse"
+               IsLoading="false"
+               Items="_result.Entries"
+               EmptyIcon="fact_check"
+               EmptyTitle="Sin entradas de ScoreCard">
+        <HeaderTemplate>
+            <th>Regla</th>
+            <th>Campo Objetivo</th>
+            <th>Valor Observado</th>
+            <th class="text-center">Pasó</th>
+            <th class="text-end">Contribución</th>
+        </HeaderTemplate>
+        <RowTemplate Context="entry">
+            <td>@(entry.RuleName ?? "—")</td>
+            <td>@entry.TargetField</td>
+            <td>@(entry.ObservedValue ?? "—")</td>
+            <td class="text-center">
+                @if (entry.Passed)
+                {
+                    <span class="cace-badge cace-badge-success">Sí</span>
+                }
+                else
+                {
+                    <span class="cace-badge cace-badge-danger">No</span>
+                }
+            </td>
+            <td class="text-end cace-table-mono">@entry.WeightedContribution.ToString("0.00")</td>
+        </RowTemplate>
+    </DataTable>
+}
+
+@code {
+    private string _creditApplicationIdText = string.Empty;
+    private bool _invalidId;
+
+    private bool _isEvaluating;
+    private ApiError? _error;
+    private RiskEvaluationResponse? _result;
+
+    private static bool IsApproved(string? outcome) =>
+        outcome is not null && outcome.Contains("Approve", StringComparison.OrdinalIgnoreCase);
+
+    private async Task EvaluateAsync()
+    {
+        if (!Guid.TryParse(_creditApplicationIdText.Trim(), out var creditApplicationId))
+        {
+            _invalidId = true;
+            return;
+        }
+
+        _invalidId = false;
+        _isEvaluating = true;
+        _error = null;
+        _result = null;
+
+        var result = await RiskEngineService.TriggerRiskEvaluationAsync(new TriggerRiskEvaluationRequest
+        {
+            CreditApplicationId = creditApplicationId
+        });
+
+        _isEvaluating = false;
+
+        if (result.IsSuccess)
+        {
+            _result = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+}

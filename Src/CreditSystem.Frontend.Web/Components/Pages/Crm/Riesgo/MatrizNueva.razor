@@ -1,0 +1,192 @@
+@page "/crm/riesgo/matrices/nuevo"
+@inject IRiskEngineService RiskEngineService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Nueva Matriz de Riesgo | CACE</PageTitle>
+
+<PageHeader Title="Nueva Matriz de Riesgo" Icon="grid_view"
+            Breadcrumb="CRM / Motor de Riesgo / Matrices / Nueva"
+            Subtitle="POST /api/v1/risk-matrices — las reglas se asocian por id, no se crean aquí." />
+
+@if (_isLoadingRules)
+{
+    <LoadingIndicator Message="Cargando reglas disponibles..." />
+}
+else if (_loadRulesError is not null)
+{
+    <ErrorState Error="_loadRulesError" OnRetry="LoadRulesAsync" />
+}
+else
+{
+    <div class="cace-card p-4" style="max-width:760px;">
+        <EditForm Model="_request" OnValidSubmit="SubmitAsync">
+            <DataAnnotationsValidator />
+
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Nombre</label>
+                <InputText class="form-control" @bind-Value="_request.Name" />
+            </div>
+
+            <div class="row g-3">
+                <div class="col-6">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Umbral Auto-Aprobación</label>
+                    <InputNumber class="form-control" @bind-Value="_request.AutoApproveThreshold" />
+                </div>
+                <div class="col-6">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Umbral Auto-Rechazo</label>
+                    <InputNumber class="form-control" @bind-Value="_request.AutoRejectThreshold" />
+                </div>
+            </div>
+
+            <div class="mb-3 mt-3">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Reglas Asociadas</label>
+                @if (_availableRules is null || _availableRules.Count == 0)
+                {
+                    <p class="text-muted small mb-0">No hay reglas de riesgo creadas. <a href="/crm/riesgo/reglas/nuevo">Crear una regla primero</a>.</p>
+                }
+                else
+                {
+                    <div class="border rounded p-2" style="max-height:220px; overflow-y:auto;">
+                        @foreach (var rule in _availableRules)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="@($"rule-{rule.Id}")"
+                                       checked="@_selectedRuleIds.Contains(rule.Id)"
+                                       @onchange="e => ToggleRule(rule.Id, (bool)(e.Value ?? false))" />
+                                <label class="form-check-label small" for="@($"rule-{rule.Id}")">
+                                    @rule.Name <span class="text-muted">(@rule.RuleType · @rule.TargetField)</span>
+                                </label>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-uppercase text-muted d-flex justify-content-between align-items-center">
+                    Bandas de Precio
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddPricingBand">
+                        <span class="material-symbols-outlined" style="font-size:16px;">add</span>
+                    </button>
+                </label>
+                @if (_pricingBands.Count > 0)
+                {
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Score Mín.</th>
+                                <th>Score Máx.</th>
+                                <th>Tasa Interés</th>
+                                <th>Monto Máx.</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var band in _pricingBands)
+                            {
+                                <tr>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="band.MinScore" /></td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="band.MaxScore" /></td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="band.InterestRate" /></td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="band.MaxAmount" /></td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _pricingBands.Remove(band)">
+                                            <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <p class="text-muted small mb-0">Sin bandas de precio. Use "+" para agregar.</p>
+                }
+            </div>
+
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger small mt-3 mb-0">@_error.Message</div>
+            }
+
+            <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                <a class="btn btn-outline-secondary" href="/crm/riesgo/matrices">Cancelar</a>
+                <button type="submit" class="btn btn-primary d-flex align-items-center gap-2" disabled="@_isSubmitting">
+                    @if (_isSubmitting)
+                    {
+                        <span class="spinner-border spinner-border-sm"></span>
+                    }
+                    Crear Matriz
+                </button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    private readonly CreateRiskMatrixRequest _request = new();
+    private readonly HashSet<Guid> _selectedRuleIds = new();
+    private readonly List<PricingBand> _pricingBands = new();
+
+    private bool _isLoadingRules = true;
+    private ApiError? _loadRulesError;
+    private List<RiskRuleResponse>? _availableRules;
+
+    private bool _isSubmitting;
+    private ApiError? _error;
+
+    protected override Task OnInitializedAsync() => LoadRulesAsync();
+
+    private async Task LoadRulesAsync()
+    {
+        _isLoadingRules = true;
+        _loadRulesError = null;
+        var result = await RiskEngineService.ListRiskRulesAsync();
+        _isLoadingRules = false;
+
+        if (result.IsSuccess)
+        {
+            _availableRules = result.Data;
+        }
+        else
+        {
+            _loadRulesError = result.Error;
+        }
+    }
+
+    private void ToggleRule(Guid ruleId, bool isSelected)
+    {
+        if (isSelected)
+        {
+            _selectedRuleIds.Add(ruleId);
+        }
+        else
+        {
+            _selectedRuleIds.Remove(ruleId);
+        }
+    }
+
+    private void AddPricingBand() => _pricingBands.Add(new PricingBand());
+
+    private async Task SubmitAsync()
+    {
+        _isSubmitting = true;
+        _error = null;
+
+        _request.RuleIds = _selectedRuleIds.ToList();
+        _request.PricingBands = _pricingBands.ToList();
+
+        var result = await RiskEngineService.CreateRiskMatrixAsync(_request);
+
+        _isSubmitting = false;
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo("/crm/riesgo/matrices");
+            return;
+        }
+
+        _error = result.Error;
+    }
+}

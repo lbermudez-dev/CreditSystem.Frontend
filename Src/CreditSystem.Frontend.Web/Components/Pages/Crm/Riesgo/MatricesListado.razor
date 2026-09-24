@@ -1,0 +1,71 @@
+@page "/crm/riesgo/matrices"
+@inject IRiskEngineService RiskEngineService
+
+<PageTitle>Matrices de Riesgo | CACE</PageTitle>
+
+<PageHeader Title="Matrices de Riesgo" Icon="grid_view"
+            Breadcrumb="CRM / Motor de Riesgo"
+            Subtitle="GET /api/v1/risk-matrices">
+    <Actions>
+        <a class="btn btn-primary d-flex align-items-center gap-2" href="/crm/riesgo/matrices/nuevo">
+            <span class="material-symbols-outlined" style="font-size:18px;">add</span>
+            Nueva Matriz
+        </a>
+    </Actions>
+</PageHeader>
+
+<DataTable TItem="RiskMatrixResponse"
+           IsLoading="_isLoading"
+           Error="_error"
+           Items="_matrices"
+           EmptyIcon="grid_view"
+           EmptyTitle="Sin matrices de riesgo registradas"
+           OnRetry="LoadAsync">
+    <HeaderTemplate>
+        <th>Nombre</th>
+        <th class="text-center">Versión</th>
+        <th>Estado</th>
+        <th class="text-end">Umbral Auto-Aprobación</th>
+        <th class="text-end">Umbral Auto-Rechazo</th>
+        <th>Creada</th>
+        <th></th>
+    </HeaderTemplate>
+    <RowTemplate Context="matrix">
+        <td class="fw-semibold">@(matrix.Name ?? "—")</td>
+        <td class="text-center cace-table-mono">@matrix.Version</td>
+        <td><StatusBadge Status="@matrix.Status.ToString()" /></td>
+        <td class="text-end cace-table-mono">@matrix.AutoApproveThreshold.ToString("0.00")</td>
+        <td class="text-end cace-table-mono">@matrix.AutoRejectThreshold.ToString("0.00")</td>
+        <td>@matrix.CreatedAt.ToString("dd/MM/yyyy")</td>
+        <td class="text-end">
+            <a class="btn btn-sm btn-outline-secondary" href="@($"/crm/riesgo/matrices/{matrix.Id}")">
+                <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+            </a>
+        </td>
+    </RowTemplate>
+</DataTable>
+
+@code {
+    private bool _isLoading = true;
+    private ApiError? _error;
+    private List<RiskMatrixResponse>? _matrices;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        var result = await RiskEngineService.ListRiskMatricesAsync();
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            _matrices = result.Data;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+}

@@ -10,7 +10,13 @@
    El resto (Ahorros, Caja, Tesorería, Contabilidad, Cumplimiento,
    Reportes, Seguridad) se deja visible por fidelidad visual pero
    deshabilitado: no hay endpoints para esos módulos en el backend
-   (regla: no inventar funcionalidad). *@
+   (regla: no inventar funcionalidad).
+
+   Grupo "CRM" (Reglas de Riesgo, Matrices de Riesgo, Evaluación de
+   Riesgo): consume Crm.WebApi (openapi_crm.txt, tag "RiskEngine"), un
+   backend distinto a CreditSystem.Api. No confundir con el enlace
+   "Riesgo" de arriba (Clasificación de Riesgo de cartera, IRiskService,
+   loans/risk-summary) — son dominios distintos. *@
 
 <aside class="cace-sidebar d-none d-lg-flex flex-column">
     <nav class="nav flex-column">
@@ -95,6 +101,21 @@
         <NavLink class="nav-link" href="/admin/proyecciones">
             <span class="material-symbols-outlined">sync_problem</span>
             <span>Proyecciones</span>
+        </NavLink>
+
+        <div class="border-top my-2 mx-2 opacity-50"></div>
+
+        <NavLink class="nav-link" href="/crm/riesgo/reglas">
+            <span class="material-symbols-outlined">rule</span>
+            <span>Reglas de Riesgo</span>
+        </NavLink>
+        <NavLink class="nav-link" href="/crm/riesgo/matrices">
+            <span class="material-symbols-outlined">grid_view</span>
+            <span>Matrices de Riesgo</span>
+        </NavLink>
+        <NavLink class="nav-link" href="/crm/riesgo/evaluaciones">
+            <span class="material-symbols-outlined">fact_check</span>
+            <span>Evaluación de Riesgo</span>
         </NavLink>
     </nav>
 </aside>

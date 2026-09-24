@@ -159,6 +159,21 @@ public sealed class ApiClient : IApiClient
         }
     }
 
+    public async Task<ApiResult> DeleteAsync(string requestUri, CancellationToken ct = default)
+    {
+        var client = _httpClientFactory.CreateClient(ApiClientConstants.HttpClientName);
+
+        try
+        {
+            using var response = await client.DeleteAsync(requestUri, ct);
+            return await ReadResponseAsync(response, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return ApiResult.Failure(BuildTransportError(ex, requestUri));
+        }
+    }
+
     public async Task<ApiResult<DocumentFile>> GetFileAsync(string requestUri, CancellationToken ct = default)
     {
         var client = _httpClientFactory.CreateClient(ApiClientConstants.HttpClientName);

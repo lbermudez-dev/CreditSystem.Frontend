@@ -39,6 +39,9 @@ public interface IApiClient
         TRequest body,
         CancellationToken ct = default);
 
+    /// <summary>Para endpoints DELETE sin response body (ej. eliminar una regla/matriz de riesgo).</summary>
+    Task<ApiResult> DeleteAsync(string requestUri, CancellationToken ct = default);
+
     /// <summary>
     /// Para el grupo "Documents" del swagger (application/pdf,
     /// application/vnd.openxmlformats-...sheet) — la respuesta no es JSON.

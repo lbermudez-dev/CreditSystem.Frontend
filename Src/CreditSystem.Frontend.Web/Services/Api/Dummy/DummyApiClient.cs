@@ -72,6 +72,12 @@ public sealed class DummyApiClient : IApiClient
         return ApiResult.Success();
     }
 
+    public async Task<ApiResult> DeleteAsync(string requestUri, CancellationToken ct = default)
+    {
+        await SimulateLatencyAsync(ct);
+        return ApiResult.Success();
+    }
+
     public async Task<ApiResult<DocumentFile>> GetFileAsync(string requestUri, CancellationToken ct = default)
     {
         await SimulateLatencyAsync(ct);
