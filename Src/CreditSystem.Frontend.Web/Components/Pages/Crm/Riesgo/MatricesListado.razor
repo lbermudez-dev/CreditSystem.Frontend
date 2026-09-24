@@ -14,6 +14,17 @@
     </Actions>
 </PageHeader>
 
+<div class="d-flex align-items-center gap-2 mb-3">
+    <label class="small fw-semibold text-uppercase text-muted mb-0" for="status-filter">Estado</label>
+    <select id="status-filter" class="form-select form-select-sm" style="max-width:200px;"
+            value="@_statusFilter" @onchange="OnStatusChanged">
+        <option value="">Todas</option>
+        <option value="@RiskMatrixStatuses.Draft">Draft</option>
+        <option value="@RiskMatrixStatuses.Active">Active</option>
+        <option value="@RiskMatrixStatuses.Superseded">Superseded</option>
+    </select>
+</div>
+
 <DataTable TItem="RiskMatrixResponse"
            IsLoading="_isLoading"
            Error="_error"
@@ -33,7 +44,7 @@
     <RowTemplate Context="matrix">
         <td class="fw-semibold">@(matrix.Name ?? "—")</td>
         <td class="text-center cace-table-mono">@matrix.Version</td>
-        <td><StatusBadge Status="@matrix.Status.ToString()" /></td>
+        <td><StatusBadge Status="@(matrix.Status ?? string.Empty)" /></td>
         <td class="text-end cace-table-mono">@matrix.AutoApproveThreshold.ToString("0.00")</td>
         <td class="text-end cace-table-mono">@matrix.AutoRejectThreshold.ToString("0.00")</td>
         <td>@matrix.CreatedAt.ToString("dd/MM/yyyy")</td>
@@ -49,14 +60,21 @@
     private bool _isLoading = true;
     private ApiError? _error;
     private List<RiskMatrixResponse>? _matrices;
+    private string _statusFilter = string.Empty;
 
     protected override Task OnInitializedAsync() => LoadAsync();
+
+    private Task OnStatusChanged(ChangeEventArgs e)
+    {
+        _statusFilter = e.Value?.ToString() ?? string.Empty;
+        return LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
         _isLoading = true;
         _error = null;
-        var result = await RiskEngineService.ListRiskMatricesAsync();
+        var result = await RiskEngineService.ListRiskMatricesAsync(string.IsNullOrEmpty(_statusFilter) ? null : _statusFilter);
         _isLoading = false;
 
         if (result.IsSuccess)

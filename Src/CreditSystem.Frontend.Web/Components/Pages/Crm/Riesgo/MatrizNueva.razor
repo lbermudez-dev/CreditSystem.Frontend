@@ -46,6 +46,7 @@ else
                 }
                 else
                 {
+                    <p class="text-muted small mb-1">El orden de evaluación es el orden en que se marcan las reglas.</p>
                     <div class="border rounded p-2" style="max-height:220px; overflow-y:auto;">
                         @foreach (var rule in _availableRules)
                         {
@@ -55,6 +56,10 @@ else
                                        @onchange="e => ToggleRule(rule.Id, (bool)(e.Value ?? false))" />
                                 <label class="form-check-label small" for="@($"rule-{rule.Id}")">
                                     @rule.Name <span class="text-muted">(@rule.RuleType · @rule.TargetField)</span>
+                                    @if (_selectedRuleIds.IndexOf(rule.Id) >= 0)
+                                    {
+                                        <span class="badge text-bg-secondary ms-1">#@(_selectedRuleIds.IndexOf(rule.Id) + 1)</span>
+                                    }
                                 </label>
                             </div>
                         }
@@ -126,7 +131,8 @@ else
 
 @code {
     private readonly CreateRiskMatrixRequest _request = new();
-    private readonly HashSet<Guid> _selectedRuleIds = new();
+    // Lista (no set): el orden de seleccion es el orden de envio.
+    private readonly List<Guid> _selectedRuleIds = new();
     private readonly List<PricingBand> _pricingBands = new();
 
     private bool _isLoadingRules = true;
@@ -159,7 +165,10 @@ else
     {
         if (isSelected)
         {
-            _selectedRuleIds.Add(ruleId);
+            if (!_selectedRuleIds.Contains(ruleId))
+            {
+                _selectedRuleIds.Add(ruleId);
+            }
         }
         else
         {
@@ -169,10 +178,44 @@ else
 
     private void AddPricingBand() => _pricingBands.Add(new PricingBand());
 
+    // Espeja las reglas del backend (RiskMatrix.OverlappingThresholds / NoRules / InvalidPricingBand).
+    private string? Validate()
+    {
+        if (string.IsNullOrWhiteSpace(_request.Name))
+        {
+            return "El nombre es obligatorio.";
+        }
+
+        if (_request.AutoApproveThreshold <= _request.AutoRejectThreshold)
+        {
+            return "El umbral de auto-aprobación debe ser mayor que el de auto-rechazo.";
+        }
+
+        if (_selectedRuleIds.Count == 0)
+        {
+            return "Seleccione al menos una regla.";
+        }
+
+        if (_pricingBands.Any(b => b.MinScore > b.MaxScore))
+        {
+            return "En cada banda de precio, el score mínimo no puede ser mayor que el máximo.";
+        }
+
+        return null;
+    }
+
     private async Task SubmitAsync()
     {
-        _isSubmitting = true;
         _error = null;
+
+        var validation = Validate();
+        if (validation is not null)
+        {
+            _error = new ApiError { Message = validation };
+            return;
+        }
+
+        _isSubmitting = true;
 
         _request.RuleIds = _selectedRuleIds.ToList();
         _request.PricingBands = _pricingBands.ToList();

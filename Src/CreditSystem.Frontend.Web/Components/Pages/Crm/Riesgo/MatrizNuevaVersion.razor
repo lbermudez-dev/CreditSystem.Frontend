@@ -1,0 +1,340 @@
+@page "/crm/riesgo/matrices/{Id:guid}/nueva-version"
+@inject IRiskEngineService RiskEngineService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Nueva Versión de Matriz | CACE</PageTitle>
+
+<PageHeader Title="@($"Nueva versión de {_source?.Name ?? "Matriz de Riesgo"}")" Icon="grid_view"
+            Breadcrumb="CRM / Motor de Riesgo / Matrices / Nueva Versión"
+            Subtitle="@($"POST /api/v1/risk-matrices/{Id}/new-version")" />
+
+@if (_isLoadingRules || _isLoadingSource)
+{
+    <LoadingIndicator Message="Cargando matriz y reglas disponibles..." />
+}
+else if (_loadSourceError is not null)
+{
+    <ErrorState Error="_loadSourceError" OnRetry="LoadAsync" />
+}
+else if (_loadRulesError is not null)
+{
+    <ErrorState Error="_loadRulesError" OnRetry="LoadAsync" />
+}
+else if (_source is not null)
+{
+    <div class="cace-card p-4" style="max-width:760px;">
+        <div class="alert alert-info small">
+            El origen sigue Activo hasta que active este borrador. Solo se envían los campos que cambie.
+        </div>
+        <EditForm Model="_form" OnValidSubmit="SubmitAsync">
+            <DataAnnotationsValidator />
+
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Nombre</label>
+                <InputText class="form-control" @bind-Value="_form.Name" />
+            </div>
+
+            <div class="row g-3">
+                <div class="col-6">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Umbral Auto-Aprobación</label>
+                    <InputNumber class="form-control" @bind-Value="_form.AutoApproveThreshold" />
+                </div>
+                <div class="col-6">
+                    <label class="form-label small fw-semibold text-uppercase text-muted">Umbral Auto-Rechazo</label>
+                    <InputNumber class="form-control" @bind-Value="_form.AutoRejectThreshold" />
+                </div>
+            </div>
+
+            <div class="mb-3 mt-3">
+                <label class="form-label small fw-semibold text-uppercase text-muted">Reglas Asociadas</label>
+                @if (_availableRules is null || _availableRules.Count == 0)
+                {
+                    <p class="text-muted small mb-0">No hay reglas de riesgo creadas. <a href="/crm/riesgo/reglas/nuevo">Crear una regla primero</a>.</p>
+                }
+                else
+                {
+                    <p class="text-muted small mb-1">El orden de evaluación es el orden en que se marcan las reglas.</p>
+                    <div class="border rounded p-2" style="max-height:220px; overflow-y:auto;">
+                        @foreach (var rule in _availableRules)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="@($"rule-{rule.Id}")"
+                                       checked="@_selectedRuleIds.Contains(rule.Id)"
+                                       @onchange="e => ToggleRule(rule.Id, (bool)(e.Value ?? false))" />
+                                <label class="form-check-label small" for="@($"rule-{rule.Id}")">
+                                    @rule.Name <span class="text-muted">(@rule.RuleType · @rule.TargetField)</span>
+                                    @if (_selectedRuleIds.IndexOf(rule.Id) >= 0)
+                                    {
+                                        <span class="badge text-bg-secondary ms-1">#@(_selectedRuleIds.IndexOf(rule.Id) + 1)</span>
+                                    }
+                                </label>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-uppercase text-muted d-flex justify-content-between align-items-center">
+                    Bandas de Precio
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddPricingBand">
+                        <span class="material-symbols-outlined" style="font-size:16px;">add</span>
+                    </button>
+                </label>
+                @if (_pricingBands.Count > 0)
+                {
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Score Mín.</th>
+                                <th>Score Máx.</th>
+                                <th>Tasa Interés</th>
+                                <th>Monto Máx.</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var band in _pricingBands)
+                            {
+                                <tr>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="band.MinScore" /></td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="band.MaxScore" /></td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="band.InterestRate" /></td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="band.MaxAmount" /></td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _pricingBands.Remove(band)">
+                                            <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <p class="text-muted small mb-0">Sin bandas de precio. Use "+" para agregar.</p>
+                }
+            </div>
+
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger small mt-3 mb-0">@_error.Message</div>
+            }
+
+            <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                <a class="btn btn-outline-secondary" href="@($"/crm/riesgo/matrices/{Id}")">Cancelar</a>
+                <button type="submit" class="btn btn-primary d-flex align-items-center gap-2" disabled="@_isSubmitting">
+                    @if (_isSubmitting)
+                    {
+                        <span class="spinner-border spinner-border-sm"></span>
+                    }
+                    Crear Borrador de Nueva Versión
+                </button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    // Formulario prellenado con el origen; la request solo lleva lo que cambio.
+    private sealed class FormModel
+    {
+        public string? Name { get; set; }
+        public double AutoApproveThreshold { get; set; }
+        public double AutoRejectThreshold { get; set; }
+    }
+
+    private readonly FormModel _form = new();
+    // Lista (no set): el orden de seleccion es el orden de envio.
+    private readonly List<Guid> _selectedRuleIds = new();
+    private readonly List<PricingBand> _pricingBands = new();
+
+    private bool _isLoadingSource = true;
+    private ApiError? _loadSourceError;
+    private RiskMatrixDetailResponse? _source;
+
+    private bool _isLoadingRules = true;
+    private ApiError? _loadRulesError;
+    private List<RiskRuleResponse>? _availableRules;
+
+    private bool _isSubmitting;
+    private ApiError? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoadingSource = true;
+        _isLoadingRules = true;
+        _loadSourceError = null;
+        _loadRulesError = null;
+
+        var sourceTask = RiskEngineService.GetRiskMatrixAsync(Id);
+        var rulesTask = RiskEngineService.ListRiskRulesAsync();
+        var sourceResult = await sourceTask;
+        var rulesResult = await rulesTask;
+
+        _isLoadingSource = false;
+        _isLoadingRules = false;
+
+        if (rulesResult.IsSuccess)
+        {
+            _availableRules = rulesResult.Data;
+        }
+        else
+        {
+            _loadRulesError = rulesResult.Error;
+        }
+
+        if (!sourceResult.IsSuccess)
+        {
+            _loadSourceError = sourceResult.Error;
+            return;
+        }
+
+        _source = sourceResult.Data;
+        if (_source is null)
+        {
+            return;
+        }
+
+        _form.Name = _source.Name;
+        _form.AutoApproveThreshold = _source.AutoApproveThreshold;
+        _form.AutoRejectThreshold = _source.AutoRejectThreshold;
+
+        _selectedRuleIds.Clear();
+        foreach (var rule in (_source.Rules ?? new()).OrderBy(r => r.Order))
+        {
+            if (!_selectedRuleIds.Contains(rule.RuleId))
+            {
+                _selectedRuleIds.Add(rule.RuleId);
+            }
+        }
+
+        _pricingBands.Clear();
+        foreach (var band in _source.PricingBands ?? new())
+        {
+            _pricingBands.Add(CloneBand(band));
+        }
+    }
+
+    private static PricingBand CloneBand(PricingBand b) => new()
+    {
+        MinScore = b.MinScore,
+        MaxScore = b.MaxScore,
+        InterestRate = b.InterestRate,
+        MaxAmount = b.MaxAmount
+    };
+
+    private static bool SameBand(PricingBand a, PricingBand b) =>
+        a.MinScore == b.MinScore && a.MaxScore == b.MaxScore
+        && a.InterestRate == b.InterestRate && a.MaxAmount == b.MaxAmount;
+
+    private void ToggleRule(Guid ruleId, bool isSelected)
+    {
+        if (isSelected)
+        {
+            if (!_selectedRuleIds.Contains(ruleId))
+            {
+                _selectedRuleIds.Add(ruleId);
+            }
+        }
+        else
+        {
+            _selectedRuleIds.Remove(ruleId);
+        }
+    }
+
+    private void AddPricingBand() => _pricingBands.Add(new PricingBand());
+
+    // Espeja las reglas del backend (RiskMatrix.OverlappingThresholds / NoRules / InvalidPricingBand).
+    private string? Validate()
+    {
+        if (_form.AutoApproveThreshold <= _form.AutoRejectThreshold)
+        {
+            return "El umbral de auto-aprobación debe ser mayor que el de auto-rechazo.";
+        }
+
+        if (_selectedRuleIds.Count == 0)
+        {
+            return "Seleccione al menos una regla.";
+        }
+
+        if (_pricingBands.Any(b => b.MinScore > b.MaxScore))
+        {
+            return "En cada banda de precio, el score mínimo no puede ser mayor que el máximo.";
+        }
+
+        return null;
+    }
+
+    // Solo lo que difiere del origen; lo igual queda en null (el backend lo hereda).
+    private CreateRiskMatrixVersionRequest BuildRequest()
+    {
+        var src = _source!;
+        var request = new CreateRiskMatrixVersionRequest();
+
+        if (_form.Name != src.Name)
+        {
+            request.Name = _form.Name;
+        }
+        if (_form.AutoApproveThreshold != src.AutoApproveThreshold)
+        {
+            request.AutoApproveThreshold = _form.AutoApproveThreshold;
+        }
+        if (_form.AutoRejectThreshold != src.AutoRejectThreshold)
+        {
+            request.AutoRejectThreshold = _form.AutoRejectThreshold;
+        }
+
+        var sourceRuleIds = (src.Rules ?? new()).OrderBy(r => r.Order).Select(r => r.RuleId).ToList();
+        if (!sourceRuleIds.SequenceEqual(_selectedRuleIds))
+        {
+            request.RuleIds = _selectedRuleIds.ToList();
+        }
+
+        var sourceBands = src.PricingBands ?? new();
+        if (sourceBands.Count != _pricingBands.Count
+            || !sourceBands.Zip(_pricingBands, SameBand).All(same => same))
+        {
+            request.PricingBands = _pricingBands.Select(CloneBand).ToList();
+        }
+
+        return request;
+    }
+
+    private async Task SubmitAsync()
+    {
+        _error = null;
+
+        if (_source is null)
+        {
+            return;
+        }
+
+        var validation = Validate();
+        if (validation is not null)
+        {
+            _error = new ApiError { Message = validation };
+            return;
+        }
+
+        _isSubmitting = true;
+
+        var result = await RiskEngineService.CreateRiskMatrixVersionAsync(Id, BuildRequest());
+
+        _isSubmitting = false;
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            // El Id devuelto es el del borrador nuevo, no el del origen.
+            NavigationManager.NavigateTo($"/crm/riesgo/matrices/{result.Data.Id}");
+            return;
+        }
+
+        _error = result.Error;
+    }
+}
